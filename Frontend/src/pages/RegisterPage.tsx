@@ -33,7 +33,6 @@ export function RegisterPage() {
     const token = params.get('token');
     const refresh = params.get('refresh');
     const userRole = params.get('role');
-    const profilePicture = params.get('picture');
 
     if (token && refresh) {
       try {
@@ -52,10 +51,27 @@ export function RegisterPage() {
             email: decodedToken.email,
             name: decodedToken.username || decodedToken.name || '',
             role: userRole || decodedToken.role || 'donor',
-            avatar: profilePicture || undefined,
+            avatar: undefined,
           };
           localStorage.setItem('safedonate_user', JSON.stringify(user));
           setUser(user);
+
+          // Fetch full user data including profilePicture
+          fetch('http://localhost:5000/api/auth/me', {
+            credentials: 'include',
+          })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+              if (data?.user?.profilePicture) {
+                const fullUser = {
+                  ...user,
+                  avatar: data.user.profilePicture,
+                };
+                localStorage.setItem('safedonate_user', JSON.stringify(fullUser));
+                setUser(fullUser);
+              }
+            })
+            .catch(err => console.debug('Profile picture fetch failed:', err));
         }
 
         toast({

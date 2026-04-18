@@ -80,10 +80,9 @@ router.get(
             // Generate tokens
             const { accessToken, refreshToken } = await generateToken(req.user, res);
             
-            // Redirect to login page with tokens and profilePicture
+            // Redirect to login page with tokens (frontend will fetch profilePicture from /api/auth/me)
             const frontendUrl = getFrontendUrl(req);
-            const profilePicture = req.user.profilePicture || '';
-            const redirectUrl = `${frontendUrl}/login?token=${accessToken}&refresh=${refreshToken}&role=${role}&picture=${encodeURIComponent(profilePicture)}`;
+            const redirectUrl = `${frontendUrl}/login?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
             console.log("  📍 Redirecting to:", redirectUrl);
             res.redirect(redirectUrl);
         } catch (error) {
