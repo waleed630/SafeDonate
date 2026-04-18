@@ -17,7 +17,7 @@ export const createDonationSession = async (req, res) => {
 
         const { campaignId, amount } = req.body;
 
-        if (req.user.role !== 'donor') {
+        if (req.user && req.user.role && req.user.role !== 'donor') {
             return res.status(403).json({ success: false, message: 'Only donors can make donations' });
         }
 
@@ -25,6 +25,15 @@ export const createDonationSession = async (req, res) => {
         if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
         const frontendUrl = getFrontendUrl(req);
+        const donorId = req.user?.role === 'donor' ? req.user._id.toString() : undefined;
+        const metadata = {
+            campaignId: campaignId.toString(),
+        };
+
+        if (donorId) {
+            metadata.donorId = donorId;
+        }
+
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -41,10 +50,7 @@ export const createDonationSession = async (req, res) => {
             success_url: `${frontendUrl}/donation/success?session_id={CHECKOUT_SESSION_ID}`,
             cancel_url: `${frontendUrl}/donation/cancel`,
             client_reference_id: campaignId,
-            metadata: {
-                donorId: req.user._id.toString(),
-                campaignId: campaignId.toString(),
-            },
+            metadata,
         });
 
         console.log('✅ Stripe session created:', session.id);
@@ -52,7 +58,7 @@ export const createDonationSession = async (req, res) => {
 
         const donation = new Donation({
             campaign: campaignId,
-            donor: req.user._id,
+            donor: req.user?.role === 'donor' ? req.user._id : undefined,
             amount,
             stripeSessionId: session.id,
         });

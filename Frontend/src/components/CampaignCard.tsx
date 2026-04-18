@@ -23,16 +23,18 @@ export function CampaignCard({ campaign, onDonateClick }: CampaignCardProps) {
   const handleDonateClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    // Check if user is logged in and is a donor
+
+    // If the user is not a donor, handle guest donation or redirect to campaign details.
     if (!user || user.role !== 'donor') {
       if (onDonateClick) {
         onDonateClick(String(display.id));
+      } else {
+        window.location.href = `/campaigns/${display.id}`;
       }
       return;
     }
-    
-    // If authenticated and is a donor, navigate to campaign details page for donation
+
+    // Authenticated donor can go straight to campaign details.
     window.location.href = `/campaigns/${display.id}`;
   };
 

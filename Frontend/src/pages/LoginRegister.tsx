@@ -308,6 +308,30 @@ export function LoginRegister() {
                   }
                 }}
               >
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={handleGoogleLogin}
+                    className="flex items-center justify-center gap-3 px-4 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 group"
+                  >
+                    <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
+                    <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800">Continue with Google</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center justify-center gap-3 px-4 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 group"
+                  >
+                    <i className="fa-brands fa-apple text-xl text-slate-800" />
+                    <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800">Continue with Apple</span>
+                  </button>
+                </div>
+
+                <div className="relative flex items-center py-2">
+                  <div className="flex-grow border-t border-slate-200" />
+                  <span className="flex-shrink-0 mx-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Or continue with email</span>
+                  <div className="flex-grow border-t border-slate-200" />
+                </div>
+
                 <div className="space-y-3">
                   <label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">I want to...</label>
                   <div className="grid grid-cols-2 gap-4">

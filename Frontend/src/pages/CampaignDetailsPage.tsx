@@ -76,12 +76,7 @@ export function CampaignDetailsPage() {
 
   // Handle Stripe payment
   const handleDonatePayment = async () => {
-    if (!user) {
-      setPaymentError('Please log in to make a donation');
-      return;
-    }
-
-    if (user?.role !== 'donor') {
+    if (user?.role && user.role !== 'donor') {
       setPaymentError('Only donors can make donations');
       return;
     }

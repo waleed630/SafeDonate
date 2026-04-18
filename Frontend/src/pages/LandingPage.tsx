@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { CampaignCard } from '../components/CampaignCard';
 import api from '../api/axios';
 import { useCategories } from '../contexts/CategoriesContext';
@@ -44,7 +44,7 @@ export function LandingPage() {
     transparency: 0,
   });
   const [platformLoading, setPlatformLoading] = useState(true);
-  const [platformError, setPlatformError] = useState<string | null>(null);
+  const navigate = useNavigate();
   const { categories: categoryStyles } = useCategories();
 
   const getCategoryStyles = (categoryName: string) => {
@@ -90,13 +90,12 @@ export function LandingPage() {
     const fetchPlatformAnalytics = async () => {
       try {
         setPlatformLoading(true);
-        setPlatformError(null);
         const response = await api.get('/analytics/public');
         if (response.data?.success) {
           setPlatformAnalytics(response.data.overview);
         }
       } catch (err: any) {
-        setPlatformError('Unable to load site metrics.');
+        console.error('Unable to load site metrics.', err);
       } finally {
         setPlatformLoading(false);
       }
@@ -141,6 +140,7 @@ export function LandingPage() {
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 sm:gap-4 pt-4">
               <button
                 type="button"
+                onClick={() => navigate(campaigns[0]?._id ? `/campaigns/${campaigns[0]._id}` : '/campaigns')}
                 className="group relative px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-emerald-500/40 overflow-hidden"
               >
                 <span className="relative z-10 flex items-center gap-2">
@@ -273,6 +273,9 @@ export function LandingPage() {
                 return (
                   <CampaignCard
                     key={campaign._id}
+                    onDonateClick={(campaignId) => {
+                      window.location.href = `/campaigns/${campaignId}`;
+                    }}
                     campaign={{
                       id: campaign._id,
                       fundraiserId: campaign.fundraiser._id,
