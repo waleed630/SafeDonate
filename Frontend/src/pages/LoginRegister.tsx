@@ -35,6 +35,7 @@ export function LoginRegister() {
     const token = params.get('token');
     const refresh = params.get('refresh');
     const userRole = params.get('role');
+    const profilePicture = params.get('picture');
 
     if (token && refresh) {
       try {
@@ -46,6 +47,7 @@ export function LoginRegister() {
             email: decoded.email,
             name: decoded.username || decoded.name || '',
             role: userRole || decoded.role || 'donor',
+            avatar: profilePicture || undefined,
           };
 
           localStorage.setItem('safedonate_token', token);

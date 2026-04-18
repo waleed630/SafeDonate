@@ -33,6 +33,7 @@ export function RegisterPage() {
     const token = params.get('token');
     const refresh = params.get('refresh');
     const userRole = params.get('role');
+    const profilePicture = params.get('picture');
 
     if (token && refresh) {
       try {
@@ -51,9 +52,10 @@ export function RegisterPage() {
             email: decodedToken.email,
             name: decodedToken.username || decodedToken.name || '',
             role: userRole || decodedToken.role || 'donor',
-            avatar: decodedToken.profilePicture || undefined,
+            avatar: profilePicture || undefined,
           };
           localStorage.setItem('safedonate_user', JSON.stringify(user));
+          setUser(user);
         }
 
         toast({
