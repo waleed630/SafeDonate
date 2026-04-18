@@ -7,13 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-
-const STORAGE_KEY = 'safedonate_tags';
+import api from '../api/axios';
 
 export interface TagItem {
-  id: string;
+  _id?: string;
+  id?: string;
   label: string;
   slug: string;
+  description?: string;
 }
 
 const defaultTags: TagItem[] = [
@@ -22,59 +23,114 @@ const defaultTags: TagItem[] = [
   { id: '3', label: 'Featured', slug: 'featured' },
 ];
 
-function loadTags(): TagItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw) as TagItem[];
-      return parsed.length ? parsed : defaultTags;
-    }
-  } catch {
-    /* ignore */
-  }
-  return defaultTags;
-}
-
-function saveTags(items: TagItem[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-  } catch {
-    /* ignore */
-  }
-}
-
 type TagsContextValue = {
   tags: TagItem[];
-  addTag: (item: Omit<TagItem, 'id'>) => void;
-  updateTag: (id: string, updates: Partial<TagItem>) => void;
-  removeTag: (id: string) => void;
+  loading: boolean;
+  error: string | null;
+  addTag: (item: Omit<TagItem, 'id' | '_id'>) => Promise<void>;
+  updateTag: (id: string, updates: Partial<TagItem>) => Promise<void>;
+  removeTag: (id: string) => Promise<void>;
+  fetchTags: () => Promise<void>;
 };
 
 const TagsContext = createContext<TagsContextValue | null>(null);
 
 export function TagsProvider({ children }: { children: ReactNode }) {
-  const [tags, setTags] = useState<TagItem[]>(loadTags);
+  const [tags, setTags] = useState<TagItem[]>(defaultTags);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  const fetchTags = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get('/tags');
+      const fetchedTags = (response.data.tags || []).map((tag: any) => ({
+        id: tag._id,
+        _id: tag._id,
+        label: tag.label,
+        slug: tag.slug,
+        description: tag.description,
+      }));
+      setTags(fetchedTags.length > 0 ? fetchedTags : defaultTags);
+    } catch (err: any) {
+      console.error('Error fetching tags:', err);
+      setError(err.response?.data?.message || 'Failed to load tags');
+      setTags(defaultTags);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch tags on mount
   useEffect(() => {
-    saveTags(tags);
-  }, [tags]);
+    fetchTags();
+  }, [fetchTags]);
 
-  const addTag = useCallback((item: Omit<TagItem, 'id'>) => {
-    const id = String(Date.now());
-    setTags((prev) => [...prev, { ...item, id }]);
+  const addTag = useCallback(
+    async (item: Omit<TagItem, 'id' | '_id'>) => {
+      try {
+        const response = await api.post('/tags', {
+          label: item.label,
+          slug: item.slug,
+          description: item.description,
+        });
+        const newTag = response.data.tag;
+        setTags((prev) => [
+          ...prev,
+          {
+            id: newTag._id,
+            _id: newTag._id,
+            label: newTag.label,
+            slug: newTag.slug,
+            description: newTag.description,
+          },
+        ]);
+      } catch (err: any) {
+        throw new Error(err.response?.data?.message || 'Failed to create tag');
+      }
+    },
+    []
+  );
+
+  const updateTag = useCallback(async (id: string, updates: Partial<TagItem>) => {
+    try {
+      const response = await api.put(`/tags/${id}`, {
+        label: updates.label,
+        slug: updates.slug,
+        description: updates.description,
+      });
+      const updatedTag = response.data.tag;
+      setTags((prev) =>
+        prev.map((t) =>
+          (t.id === id || t._id === id)
+            ? {
+                id: updatedTag._id,
+                _id: updatedTag._id,
+                label: updatedTag.label,
+                slug: updatedTag.slug,
+                description: updatedTag.description,
+              }
+            : t
+        )
+      );
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to update tag');
+    }
   }, []);
 
-  const updateTag = useCallback((id: string, updates: Partial<TagItem>) => {
-    setTags((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-  }, []);
-
-  const removeTag = useCallback((id: string) => {
-    setTags((prev) => prev.filter((t) => t.id !== id));
+  const removeTag = useCallback(async (id: string) => {
+    try {
+      await api.delete(`/tags/${id}`);
+      setTags((prev) => prev.filter((t) => t.id !== id && t._id !== id));
+    } catch (err: any) {
+      throw new Error(err.response?.data?.message || 'Failed to delete tag');
+    }
   }, []);
 
   const value = useMemo(
-    () => ({ tags, addTag, updateTag, removeTag }),
-    [tags, addTag, updateTag, removeTag]
+    () => ({ tags, loading, error, addTag, updateTag, removeTag, fetchTags }),
+    [tags, loading, error, addTag, updateTag, removeTag, fetchTags]
   );
 
   return (

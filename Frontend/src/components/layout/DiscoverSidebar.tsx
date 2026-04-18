@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 const navItems = [
   { href: '/', icon: 'fa-house', label: 'Home' },
@@ -17,6 +18,31 @@ interface DiscoverSidebarProps {
 
 export function DiscoverSidebar({ isOpen = false, onClose }: DiscoverSidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    onClose?.();
+  };
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.href === '/fundraiser/create-campaign' || item.href === '/fundraiser/dashboard') {
+      return user?.role === 'fundraiser';
+    }
+    if (item.href === '/admin/dashboard') {
+      return user?.role === 'admin';
+    }
+    if (item.href === '/donor/dashboard') {
+      return user?.role === 'donor';
+    }
+    return true;
+  });
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
 
   return (
     <>
@@ -51,7 +77,7 @@ export function DiscoverSidebar({ isOpen = false, onClose }: DiscoverSidebarProp
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto hide-scrollbar">
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
@@ -72,36 +98,54 @@ export function DiscoverSidebar({ isOpen = false, onClose }: DiscoverSidebarProp
       </nav>
 
       <div className="px-4 py-4 space-y-3 border-t border-emerald-700/50 bg-emerald-900/20">
-        <Link
-          to="/login"
-          onClick={onClose}
-          className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-emerald-100 font-medium transition-all duration-200 hover:bg-emerald-700 hover:bg-opacity-40 hover:text-white"
-        >
-          <i className="fa-solid fa-arrow-right-to-bracket w-4" />
-          <span>Login</span>
-        </Link>
-        <Link
-          to="/register"
-          onClick={onClose}
-          className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-emerald-500/50 border border-emerald-400/20"
-        >
-          <i className="fa-solid fa-user-plus w-4" />
-          <span>Register</span>
-        </Link>
+        {!user ? (
+          <>
+            <Link
+              to="/login"
+              onClick={onClose}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-emerald-100 font-medium transition-all duration-200 hover:bg-emerald-700 hover:bg-opacity-40 hover:text-white"
+            >
+              <i className="fa-solid fa-arrow-right-to-bracket w-4" />
+              <span>Login</span>
+            </Link>
+            <Link
+              to="/register"
+              onClick={onClose}
+              className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-emerald-500/50 border border-emerald-400/20"
+            >
+              <i className="fa-solid fa-user-plus w-4" />
+              <span>Register</span>
+            </Link>
+          </>
+        ) : (
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold transition-all duration-200 shadow-lg hover:shadow-red-500/50"
+          >
+            <i className="fa-solid fa-sign-out-alt w-4" />
+            <span>Logout</span>
+          </button>
+        )}
       </div>
 
+      {user && (
       <div className="px-4 py-4 border-t border-emerald-700/50">
         <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-800/40 hover:bg-emerald-700/60 transition-all duration-200 cursor-pointer border border-transparent hover:border-emerald-600/30">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center font-bold text-emerald-900 text-sm shadow-sm">
-            JD
-          </div>
+          {user.avatar ? (
+            <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center font-bold text-emerald-900 text-sm shadow-sm">
+              {getInitials(user.name)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white truncate">John Donor</p>
-            <p className="text-xs text-emerald-300 truncate">john@example.com</p>
+            <p className="text-sm font-semibold text-white truncate">{user.name}</p>
+            <p className="text-xs text-emerald-300 truncate">{user.email}</p>
           </div>
           <i className="fa-solid fa-chevron-down w-4 text-emerald-300" />
         </div>
       </div>
+      )}
     </div>
     </>
   );

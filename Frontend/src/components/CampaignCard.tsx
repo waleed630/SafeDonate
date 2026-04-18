@@ -1,19 +1,56 @@
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
 import type { Campaign } from '../data/campaigns';
 import { useRealtime } from '../contexts/RealtimeContext';
+import { useAuth } from '../contexts/AuthContext';
+import { MessageModal } from './MessageModal';
 
 interface CampaignCardProps {
-  campaign: Campaign;
+  campaign: Omit<Campaign, 'id'> & { id: string | number; fundraiserId?: string };
+  onDonateClick?: (campaignId: string) => void;
 }
 
-export function CampaignCard({ campaign }: CampaignCardProps) {
+export function CampaignCard({ campaign, onDonateClick }: CampaignCardProps) {
   const { connected, getProgressOverride } = useRealtime();
-  const progressOverride = connected ? getProgressOverride(campaign.id) : null;
+  const { user } = useAuth() || { user: null };
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const campaignIdNumber = typeof campaign.id === 'number' ? campaign.id : NaN;
+  const progressOverride = connected && Number.isFinite(campaignIdNumber) ? getProgressOverride(campaignIdNumber) : null;
   const display = progressOverride
     ? { ...campaign, raised: progressOverride.raised, goal: progressOverride.goal, percent: progressOverride.percent }
     : campaign;
 
+  const handleDonateClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Check if user is logged in and is a donor
+    if (!user || user.role !== 'donor') {
+      if (onDonateClick) {
+        onDonateClick(String(display.id));
+      }
+      return;
+    }
+    
+    // If authenticated and is a donor, navigate to campaign details page for donation
+    window.location.href = `/campaigns/${display.id}`;
+  };
+
+  const handleMessageClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!user) {
+      // Show login modal or redirect to login
+      window.location.href = '/login';
+      return;
+    }
+    
+    setShowMessageModal(true);
+  };
+
   return (
+    <>
     <Link to={`/campaigns/${display.id}`}>
     <article className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 flex flex-col h-full">
       <div className="relative h-56 overflow-hidden">
@@ -33,7 +70,17 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
         <div className="p-4 sm:p-6 flex-1 flex flex-col">
         <div className="flex items-center gap-3 mb-3">
           <img src={display.avatar} alt={display.author} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
-          <span className="text-sm text-slate-500">by <span className="text-slate-800 font-medium">{display.author}</span></span>
+          <div className="flex-1">
+            <span className="text-sm text-slate-500">by <span className="text-slate-800 font-medium">{display.author}</span></span>
+          </div>
+          <button
+            type="button"
+            onClick={handleMessageClick}
+            className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 hover:bg-emerald-200 transition-colors flex items-center justify-center"
+            title={`Message ${display.author}`}
+          >
+            <i className="fa-solid fa-envelope text-sm" />
+          </button>
         </div>
         <h3 className={`text-xl font-bold text-slate-800 mb-2 ${display.titleHover} transition-colors line-clamp-2`}>{display.title}</h3>
         <p className="text-slate-500 text-sm mb-6 line-clamp-2">{display.description}</p>
@@ -50,10 +97,26 @@ export function CampaignCard({ campaign }: CampaignCardProps) {
             </div>
             <div className="mt-1 text-xs text-slate-400 text-right">Goal: ${display.goal.toLocaleString()}</div>
           </div>
-          <button type="button" className="w-full py-3 rounded-xl border-2 border-emerald-100 text-emerald-700 font-bold hover:bg-emerald-50 hover:border-emerald-200 transition-all active:scale-[0.98]">Donate Now</button>
+          <button 
+            type="button" 
+            onClick={handleDonateClick}
+            className="w-full py-3 rounded-xl border-2 border-emerald-100 text-emerald-700 font-bold hover:bg-emerald-50 hover:border-emerald-200 transition-all active:scale-[0.98]"
+          >
+            Donate Now
+          </button>
         </div>
       </div>
     </article>
     </Link>
+
+    <MessageModal
+      isOpen={showMessageModal}
+      onClose={() => setShowMessageModal(false)}
+      fundraiserName={display.author}
+      fundraiserId={String(campaign.fundraiserId || display.id)}
+      campaignTitle={display.title}
+      campaignId={String(display.id)}
+    />
+    </>
   );
 }

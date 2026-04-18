@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  discoverCampaigns,
   discoverCategories,
   discoverLocations,
   targetAmountRanges,
@@ -10,6 +9,27 @@ import {
 } from '../data/discoverCampaigns';
 import { LiveDonationMarquee } from '../components/live/LiveDonationMarquee';
 import { useTagsOptional } from '../contexts/TagsContext';
+import api from '../api/axios';
+
+interface CampaignItem {
+  id: string;
+  image: string;
+  category: string;
+  categoryId: string;
+  title: string;
+  description: string;
+  location: string;
+  raised: number;
+  goal: number;
+  percent: number;
+  author: string;
+  authorAvatar: string;
+  daysLeft: number;
+  donors: number;
+  createdAt: string;
+  urgent?: boolean;
+  tagIds?: string[];
+}
 
 export function CampaignsPage() {
   const tagsContext = useTagsOptional();
@@ -21,6 +41,10 @@ export function CampaignsPage() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [showFilters, setShowFilters] = useState(false);
+  const [campaigns, setCampaigns] = useState<CampaignItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const filtersRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -31,13 +55,75 @@ export function CampaignsPage() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  let filtered = discoverCampaigns.filter((c) => {
-    const matchCategory = selectedCategory === 'all' || c.categoryId === selectedCategory;
-    const matchSearch =
-      !search ||
-      c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.description.toLowerCase().includes(search.toLowerCase()) ||
-      c.location.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const selectedCategoryData = discoverCategories.find((cat) => cat.id === selectedCategory);
+        const params: Record<string, string | number> = {
+          sort: sortBy,
+        };
+
+        if (search.trim()) params.search = search.trim();
+        if (selectedCategory !== 'all' && selectedCategoryData) params.category = selectedCategoryData.label;
+        if (locationFilter !== 'all') params.location = locationFilter;
+
+        const targetRange = targetAmountRanges.find((r) => r.id === targetFilter) || targetAmountRanges[0];
+        if (targetFilter !== 'all') {
+          params.minGoal = targetRange.min;
+          if (Number.isFinite(targetRange.max) && targetRange.max !== Infinity) {
+            params.maxGoal = targetRange.max;
+          }
+        }
+
+        const progressRange = progressRanges.find((r) => r.id === progressFilter) || progressRanges[0];
+        if (progressFilter !== 'all' && progressRange.min > 0) {
+          params.minProgress = progressRange.min;
+        }
+
+        if (selectedTagIds.length > 0) {
+          params.tags = selectedTagIds.join(',');
+        }
+
+        const response = await api.get('/campaigns', { params });
+        const results = response.data.campaigns || [];
+
+        const normalized = results.map((c: any) => ({
+          id: c._id,
+          image: c.images?.[0] || 'https://via.placeholder.com/400x300?text=Campaign',
+          category: c.category || 'General',
+          categoryId: String(c.category || 'general').toLowerCase(),
+          title: c.title || 'Untitled Campaign',
+          description: c.description || '',
+          location: c.location || 'Unknown',
+          raised: c.raisedAmount ?? 0,
+          goal: c.goalAmount ?? 0,
+          percent: c.progress ?? Math.round(((c.raisedAmount ?? 0) / Math.max(1, c.goalAmount ?? 1)) * 100),
+          author: c.fundraiser?.username || 'Organizer',
+          authorAvatar: `https://i.pravatar.cc/150?u=${c.fundraiser?._id || c._id}`,
+          daysLeft: c.daysLeft ?? 0,
+          donors: c.donorCount ?? 0,
+          createdAt: c.createdAt || new Date().toISOString(),
+          urgent: c.urgent || false,
+          tagIds: c.tags || [],
+        }));
+
+        setCampaigns(normalized);
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Failed to load campaigns. Please try again.');
+        setCampaigns([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCampaigns();
+  }, [search, selectedCategory, locationFilter, targetFilter, progressFilter, selectedTagIds, sortBy, refreshKey]);
+
+  let filtered = campaigns.filter((c) => {
+    // Remove redundant search filtering since backend already handles it
     const matchLocation = locationFilter === 'all' || c.location === locationFilter;
     const targetRange = targetAmountRanges.find((r) => r.id === targetFilter) || targetAmountRanges[0];
     const matchTarget = c.goal >= targetRange.min && c.goal <= targetRange.max;
@@ -46,7 +132,7 @@ export function CampaignsPage() {
     const matchTag =
       selectedTagIds.length === 0 ||
       (c.tagIds && selectedTagIds.some((tid) => c.tagIds!.includes(tid)));
-    return matchCategory && matchSearch && matchLocation && matchTarget && matchProgress && matchTag;
+    return matchLocation && matchTarget && matchProgress && matchTag;
   });
 
   const sorted = [...filtered].sort((a, b) => {
@@ -162,24 +248,27 @@ export function CampaignsPage() {
                     <div>
                       <label className="block text-xs font-medium text-slate-500 mb-1.5">Tags</label>
                       <div className="flex flex-wrap gap-2">
-                        {tagsContext.tags.map((tag) => (
-                          <label
-                            key={tag.id}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm cursor-pointer hover:border-emerald-500"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedTagIds.includes(tag.id)}
-                              onChange={(e) =>
-                                setSelectedTagIds((prev) =>
-                                  e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
-                                )
-                              }
-                              className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            <span>{tag.label}</span>
-                          </label>
-                        ))}
+                        {tagsContext.tags.map((tag) => {
+                          const tagId = tag.id ?? tag._id ?? '';
+                          return (
+                            <label
+                              key={tagId}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm cursor-pointer hover:border-emerald-500"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedTagIds.includes(tagId)}
+                                onChange={(e) =>
+                                  setSelectedTagIds((prev) =>
+                                    e.target.checked ? [...prev, tagId] : prev.filter((id) => id !== tagId)
+                                  )
+                                }
+                                className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                              />
+                              <span>{tag.label}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -215,9 +304,44 @@ export function CampaignsPage() {
         </div>
       </header>
 
+      {/* Mobile Search Bar */}
+      <div className="sm:hidden px-4 sm:px-6 md:px-8 py-4 bg-white border-b border-slate-200">
+        <div className="relative max-w-md mx-auto">
+          <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search campaigns, causes, or keywords..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder-slate-400"
+          />
+        </div>
+      </div>
+
       <LiveDonationMarquee />
 
       <main className="px-4 sm:px-6 md:px-8 py-6 sm:py-8 pb-16 sm:pb-24 max-w-7xl mx-auto space-y-8 sm:space-y-12">
+        {loading ? (
+          <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-sm text-center">
+            <div className="mx-auto mb-4 h-12 w-12 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin" />
+            <p className="text-slate-600 text-lg font-medium">Loading campaigns...</p>
+          </div>
+        ) : error ? (
+          <div className="rounded-3xl border border-rose-200 bg-rose-50 p-10 shadow-sm text-center">
+            <p className="text-rose-700 text-lg font-semibold mb-3">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                setRefreshKey((key) => key + 1);
+              }}
+              className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-rose-600 text-white font-semibold hover:bg-rose-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+
         {/* Featured Hero Section */}
         <section className="relative rounded-xl sm:rounded-2xl overflow-hidden shadow-xl group cursor-pointer">
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/90 via-emerald-900/60 to-transparent z-10" />

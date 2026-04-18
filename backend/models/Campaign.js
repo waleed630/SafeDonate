@@ -12,14 +12,11 @@ const campaignSchema = new mongoose.Schema({
     category: {
         type: String,
         required: true,
-        enum: [
-            'Medical', 'Education', 'Animals', 'Disaster',
-            'Creative', 'Environment', 'Other'
-        ],
+        // Removed enum - will validate in controller by fetching from DB
     },
     tags: {
         type: [String],
-        enum: ['Urgent', 'Verified', 'Featured'],
+        // Removed enum - tags come from Tag collection in database
         default: [],
     },
     description: {           // ← Story
@@ -53,6 +50,25 @@ const campaignSchema = new mongoose.Schema({
         ref: 'User',
         required: true,
     },
+    status: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending',
+    },
+    verified: {
+        type: Boolean,
+        default: false,
+    },
+    fraudScore: {
+        type: Number,
+        default: 0,           // 0-100 (higher = more suspicious)
+    },
+    verifiedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+    },
+    verifiedAt: Date,
+    rejectionReason: String,
     updates: [{
         title: { type: String, required: true },
         content: { type: String, required: true },

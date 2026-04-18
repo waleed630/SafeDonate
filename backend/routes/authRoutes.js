@@ -5,13 +5,11 @@ const router = express.Router();
 import { registerUser, loginUser, logoutUser, refreshTokenUser } from "../controllers/identity-controller.js";
 import protect from "../middleware/authMiddleware.js";
 import restrictTo from "../middleware/role.js";
-import { loginLimiter, authLimiter } from "../middleware/rateLimiter.js";
 import passport from "passport";
 import User from "../models/User.js";
 import crypto from "crypto";
 import generateToken from "../utils/generateToken.js";   // ← Updated import path
 import nodemailer from "nodemailer";
-import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
 import logger from "../utils/logger.js";   // ← Added for consistency
@@ -20,38 +18,77 @@ import logger from "../utils/logger.js";   // ← Added for consistency
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.join(__dirname, "../.env") });
-
 // ====================== PUBLIC ROUTES ======================
-router.post("/register", authLimiter, registerUser);
-router.post("/login", loginLimiter, loginUser);
+router.post("/register", registerUser);
+router.post("/login", loginUser);
 router.post("/logout", logoutUser);
 router.post("/refresh-token", refreshTokenUser);
 
 // ====================== GOOGLE OAUTH ======================
-router.get(
-    "/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-);
+router.get("/google", (req, res, next) => {
+    // Custom callback to preserve role in session/state
+    const role = req.query.role || "donor"; // Default to donor if not specified
+    req.session = req.session || {};
+    req.session.oauthRole = role;
+    
+    passport.authenticate("google", { 
+        scope: ["profile", "email"],
+        state: role // Pass role as state parameter
+    })(req, res, next);
+});
 
 router.get(
     "/google/callback",
     passport.authenticate("google", {
-        failureRedirect: "http://localhost:8080/login",
+        failureRedirect: process.env.FRONTEND_URL + "/register",
         session: false,
     }),
     async (req, res) => {
-        await generateToken(req.user, res);
-        res.redirect("http://localhost:8080");   // or /dashboard
+        try {
+            // Get role from state or default to donor
+            const role = req.query.state || req.user.role || "donor";
+            
+            // Update user role if it differs
+            if (req.user.role !== role) {
+                req.user.role = role;
+                await req.user.save();
+            }
+
+            // Generate tokens
+            const { accessToken, refreshToken } = await generateToken(req.user, res);
+            
+            // Determine dashboard based on role
+            const dashboardMap = {
+                admin: "/admin/dashboard",
+                fundraiser: "/fundraiser/dashboard",
+                donor: "/donor/dashboard"
+            };
+            
+            const dashboardUrl = dashboardMap[role] || "/donor/dashboard";
+            
+            // Redirect to frontend with tokens (encoded in URL for SPA)
+            const redirectUrl = `${process.env.FRONTEND_URL}${dashboardUrl}?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
+            res.redirect(redirectUrl);
+        } catch (error) {
+            logger.error("Error in Google OAuth callback: %s", error.message);
+            res.redirect(process.env.FRONTEND_URL + "/register?error=oauth_failed");
+        }
     }
 );
 
 // ====================== PROTECTED ROUTES ======================
-router.get("/me", protect, (req, res) => {
-    res.json({
-        success: true,
-        user: req.user
-    });
+router.get("/me", protect, async (req, res) => {
+    try {
+        // Get full user data including profilePicture
+        const user = await User.findById(req.user.id).select('_id username email role profilePicture');
+        res.json({
+            success: true,
+            user: user
+        });
+    } catch (error) {
+        logger.error("Error fetching user data: %s", error.message);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
 });
 
 router.get("/admin", protect, restrictTo("admin"), (req, res) => {
@@ -63,19 +100,46 @@ router.get("/admin", protect, restrictTo("admin"), (req, res) => {
 
 // ====================== PASSWORD RESET ======================
 // Email transporter
+const emailUser = process.env.EMAIL_USER || "www.mwaqas.com8@gmail.com";
+const emailPass = process.env.EMAIL_PASS || "zpmdlslnsqkfrmat";
+
+// Validate email credentials
+if (!emailUser || !emailPass) {
+    logger.warn("⚠️ Email credentials not configured. Password reset emails will not be sent.");
+    logger.warn("   Please set EMAIL_USER and EMAIL_PASS in your .env file");
+}
+
 const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
+        user: emailUser,
+        pass: emailPass,
     },
 });
 
-router.post("/forgot-password", authLimiter, async (req, res) => {
+// Verify transporter connection
+transporter.verify((error, success) => {
+    if (error) {
+        logger.error("❌ Email transporter error:", error.message);
+    } else if (success) {
+        logger.info("✅ Email transporter ready");
+    }
+});
+
+router.post("/forgot-password", async (req, res) => {
     try {
         const { email } = req.body;
         if (!email) {
             return res.status(400).json({ success: false, message: "Email is required" });
+        }
+
+        // Check if email credentials are configured
+        if (!emailUser || !emailPass) {
+            logger.error("Email credentials not configured");
+            return res.status(500).json({
+                success: false,
+                message: "Email service is not configured. Please contact support.",
+            });
         }
 
         const user = await User.findOne({ email });
@@ -91,7 +155,9 @@ router.post("/forgot-password", authLimiter, async (req, res) => {
         user.passwordResetExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
         await user.save();
 
-        const resetURL = `http://localhost:8080/reset-password/${resetToken}`;
+        // Use FRONTEND_URL from environment, fallback to localhost:5173
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const resetURL = `${frontendUrl}/reset-password/${resetToken}`;
 
         await transporter.sendMail({
             from: `"SafeDonate" <${process.env.EMAIL_USER}>`,
@@ -122,15 +188,50 @@ router.post("/forgot-password", authLimiter, async (req, res) => {
         });
 
         logger.info(`Password reset link sent to: ${email}`);
-        res.json({ success: true, message: "Reset link sent to your email" });
+        
+        // In development, also return the token so it can be used for testing
+        const isDevelopment = process.env.NODE_ENV !== 'production';
+        const response = {
+            success: true,
+            message: "Reset link sent to your email"
+        };
+        
+        if (isDevelopment) {
+            response.devToken = resetToken;
+            response.devResetUrl = `${frontendUrl}/reset-password/${resetToken}`;
+            logger.info(`[DEV MODE] Reset URL: ${response.devResetUrl}`);
+        }
+        
+        res.json(response);
     } catch (error) {
-        logger.error("Forgot password error:", error.message);
-        res.status(500).json({ success: false, message: "Server error" });
+        logger.error("Forgot password error - Email sending failed:", {
+            message: error.message,
+            code: error.code,
+            command: error.command,
+        });
+        
+        // Provide helpful error message
+        let userMessage = "Failed to send reset email. ";
+        if (error.message?.includes("credentials")) {
+            userMessage += "Email service is not properly configured. Please contact support.";
+        } else if (error.message?.includes("ENOTFOUND")) {
+            userMessage += "Network error. Please try again later.";
+        } else {
+            userMessage += "Please try again later.";
+        }
+        
+        res.status(500).json({ success: false, message: userMessage });
     }
 });
 
 router.post("/reset-password/:token", async (req, res) => {
     try {
+        const { password } = req.body;
+        
+        if (!password) {
+            return res.status(400).json({ success: false, message: "Password is required" });
+        }
+
         const hashedToken = crypto.createHash("sha256").update(req.params.token).digest("hex");
 
         const user = await User.findOne({
@@ -142,7 +243,7 @@ router.post("/reset-password/:token", async (req, res) => {
             return res.status(400).json({ success: false, message: "Invalid or expired token" });
         }
 
-        user.password = req.body.password;
+        user.password = password;
         user.passwordResetToken = undefined;
         user.passwordResetExpires = undefined;
         await user.save();
@@ -152,11 +253,10 @@ router.post("/reset-password/:token", async (req, res) => {
 
         logger.info(`Password reset successful for: ${user.email}`);
 
-        res.json({
+        // Return minimal response to avoid large payload issues
+        return res.status(200).json({
             success: true,
-            message: "Password reset successful",
-            accessToken,
-            refreshToken,
+            message: "Password reset successful"
         });
     } catch (error) {
         logger.error("Reset password error:", error.message);

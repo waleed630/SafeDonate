@@ -1,20 +1,197 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { RegisterSidebar } from '../components/layout/RegisterSidebar';
 import { MobileHeader } from '../components/layout/MobileHeader';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogAction,
+} from '../components/ui/AlertDialog';
+import { useToast } from '../hooks/use-toast';
+
+const BACKEND_URL = 'http://localhost:5000';
 
 export function RegisterPage() {
   const [role, setRole] = useState<'donor' | 'fundraiser'>('donor');
   const [showPassword, setShowPassword] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
-  const { register } = useAuth() as any;
+  const { register, setUser } = useAuth() as any;
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  // Handle OAuth callback from URL parameters
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const refresh = params.get('refresh');
+    const userRole = params.get('role');
+
+    if (token && refresh) {
+      try {
+        // Decode JWT token to get user info (without verification on frontend)
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+          const decodedToken = JSON.parse(atob(tokenParts[1]));
+          
+          // Store tokens
+          localStorage.setItem('safedonate_token', token);
+          localStorage.setItem('safedonate_refresh_token', refresh);
+          
+          // Store user info
+          const user = {
+            id: decodedToken.id || decodedToken.userId,
+            email: decodedToken.email,
+            name: decodedToken.username || decodedToken.name || '',
+            role: userRole || decodedToken.role || 'donor',
+            avatar: decodedToken.profilePicture || undefined,
+          };
+          localStorage.setItem('safedonate_user', JSON.stringify(user));
+        }
+
+        toast({
+          title: '✨ Welcome!',
+          description: `You have successfully registered as a ${userRole}!`,
+          variant: 'success',
+        });
+
+        const dest = userRole === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
+        navigate(dest, { replace: true });
+      } catch (error) {
+        console.error('Failed to process OAuth callback:', error);
+        setErrorDialog({
+          open: true,
+          title: 'Authentication Error',
+          message: 'Failed to process your authentication. Please try again.',
+        });
+      }
+    } else if (params.get('error') === 'oauth_failed') {
+      setErrorDialog({
+        open: true,
+        title: 'OAuth Failed',
+        message: 'Google authentication failed. Please try again.',
+      });
+    }
+  }, [navigate, toast]);
+
+  const handleGoogleSignup = () => {
+    // Redirect to backend Google OAuth endpoint with selected role
+    window.location.href = `${BACKEND_URL}/api/auth/google?role=${role}`;
+  };
+
+  const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      const form = e.target as HTMLFormElement;
+      const email = (form.querySelector('#email') as HTMLInputElement)?.value?.trim();
+      const password = (form.querySelector('#password') as HTMLInputElement)?.value;
+      const firstName = (form.querySelector('#first-name') as HTMLInputElement)?.value?.trim() || '';
+      const lastName = (form.querySelector('#last-name') as HTMLInputElement)?.value?.trim() || '';
+      const termsChecked = (form.querySelector('#terms') as HTMLInputElement)?.checked;
+
+      // Validation
+      if (!firstName || !lastName) {
+        setErrorDialog({
+          open: true,
+          title: 'Incomplete Form',
+          message: 'Please enter both first and last name.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!email) {
+        setErrorDialog({
+          open: true,
+          title: 'Missing Email',
+          message: 'Please enter a valid email address.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!password || password.length < 6) {
+        setErrorDialog({
+          open: true,
+          title: 'Weak Password',
+          message: 'Password must be at least 6 characters long.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!termsChecked) {
+        setErrorDialog({
+          open: true,
+          title: 'Terms Not Accepted',
+          message: 'Please agree to the Terms of Service and Privacy Policy.',
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      const username = `${firstName} ${lastName}`;
+
+      await register({ email, password, username, role });
+
+      toast({
+        title: '✨ Success!',
+        description: `Welcome to SafeDonate! You've been registered as a ${role}.`,
+        variant: 'success',
+      });
+
+      const dest = role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
+      navigate(dest, { replace: true });
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.message || err?.message || 'Registration failed. Please try again.';
+      const existingRole = err?.response?.data?.existingRole;
+
+      // Check if this is a role mismatch error
+      if (existingRole) {
+        setErrorDialog({
+          open: true,
+          title: '⚠️ Already Registered',
+          message: errorMessage,
+        });
+      } else {
+        setErrorDialog({
+          open: true,
+          title: 'Registration Failed',
+          message: errorMessage,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="bg-gray-50 text-gray-900 font-sans antialiased min-h-screen">
       <RegisterSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Error Dialog */}
+      <AlertDialog open={errorDialog.open} onOpenChange={(open) => setErrorDialog({ ...errorDialog, open })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{errorDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{errorDialog.message}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setErrorDialog({ ...errorDialog, open: false })}>
+              Try Again
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <div className="ml-0 lg:ml-72 min-h-screen flex flex-col overflow-hidden bg-white">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
@@ -136,6 +313,7 @@ export function RegisterPage() {
               <div className="grid grid-cols-2 gap-4 mb-8">
                 <button
                   type="button"
+                  onClick={handleGoogleSignup}
                   className="flex items-center justify-center gap-2 px-4 py-3 border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all duration-200 group"
                 >
                   <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
@@ -163,16 +341,7 @@ export function RegisterPage() {
               {/* Form */}
               <form
                 className="space-y-5"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const email = (form.querySelector('#email') as HTMLInputElement)?.value;
-                  const password = (form.querySelector('#password') as HTMLInputElement)?.value;
-                  const username = ((form.querySelector('#first-name') as HTMLInputElement)?.value || '') + ' ' + ((form.querySelector('#last-name') as HTMLInputElement)?.value || '');
-                  await register({ email, password, username, role });
-                  const dest = role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
-                  navigate(dest, { replace: true });
-                }}
+                onSubmit={handleRegister}
               >
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
@@ -241,9 +410,17 @@ export function RegisterPage() {
 
                 <button
                   type="submit"
-                  className="w-full flex items-center justify-center px-4 py-3.5 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all duration-200 transform hover:-translate-y-0.5"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center px-4 py-3.5 border border-transparent rounded-lg shadow-sm text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 transition-all duration-200 transform hover:-translate-y-0.5 disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
-                  Create Account
+                  {isLoading ? (
+                    <>
+                      <i className="fa-solid fa-spinner animate-spin mr-2" />
+                      Creating Account...
+                    </>
+                  ) : (
+                    'Create Account'
+                  )}
                 </button>
               </form>
             </div>

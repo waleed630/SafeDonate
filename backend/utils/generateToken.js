@@ -4,15 +4,15 @@ import crypto from "crypto";
 import RefreshToken from "../models/RefreshToken.js";
 
 const generateToken = async (user, res) => {
-    // Payload for JWT — includes everything needed for SafeDonate
+    // Payload for JWT — includes only essential auth data (no large fields)
     const payload = {
+        id: user._id,
         userId: user._id,
         username: user.username,
         email: user.email,
-        role: user.role,                    // ← No fallback needed (schema guarantees it)
-        // You can add more later if needed:
-        // name: user.name,
-        // isVerified: user.isVerified,
+        role: user.role
+        // ⚠️ NEVER include: profilePicture, bio, or large data in JWT
+        // These should be fetched separately via /api/auth/me endpoint
     };
 
     const accessToken = jwt.sign(payload, process.env.JWT_SECRET, {

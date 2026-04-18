@@ -1,4 +1,5 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 const navItems = [
   { href: '/', icon: 'fa-home', label: 'Home' },
@@ -17,6 +18,31 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+    onClose?.();
+  };
+
+  const visibleNavItems = navItems.filter((item) => {
+    if (item.href === '/fundraiser/create-campaign' || item.href === '/fundraiser/dashboard') {
+      return user?.role === 'fundraiser';
+    }
+    if (item.href === '/admin/dashboard') {
+      return user?.role === 'admin';
+    }
+    if (item.href === '/donor/dashboard') {
+      return user?.role === 'donor';
+    }
+    return true;
+  });
+
+  const getInitials = (name: string) => {
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
 
   return (
     <>
@@ -51,7 +77,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
       </div>
 
       <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-2 [&::-webkit-scrollbar]:thin [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:bg-emerald-700 [&::-webkit-scrollbar-thumb]:rounded-full" style={{ scrollbarWidth: 'thin' }}>
-        {navItems.map((item) => {
+        {visibleNavItems.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
@@ -70,42 +96,60 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
 
         <div className="my-4 border-t border-emerald-700" />
 
-        <Link
-          to="/login"
-          onClick={onClose}
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 hover:bg-emerald-700 hover:text-white ${
-            location.pathname === '/login' ? 'bg-emerald-700 text-white' : 'text-emerald-100'
-          }`}
-        >
-          <i className="fa-solid fa-sign-in-alt w-5" />
-          <span>Login</span>
-        </Link>
-        <Link
-          to="/register"
-          onClick={onClose}
-          className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 hover:bg-emerald-700 hover:text-white ${
-            location.pathname === '/register' ? 'bg-emerald-700 text-white' : 'text-emerald-100'
-          }`}
-        >
-          <i className="fa-solid fa-user-plus w-5" />
-          <span>Register</span>
-        </Link>
+        {!user ? (
+          <>
+            <Link
+              to="/login"
+              onClick={onClose}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 hover:bg-emerald-700 hover:text-white ${
+                location.pathname === '/login' ? 'bg-emerald-700 text-white' : 'text-emerald-100'
+              }`}
+            >
+              <i className="fa-solid fa-sign-in-alt w-5" />
+              <span>Login</span>
+            </Link>
+            <Link
+              to="/register"
+              onClick={onClose}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 hover:bg-emerald-700 hover:text-white ${
+                location.pathname === '/register' ? 'bg-emerald-700 text-white' : 'text-emerald-100'
+              }`}
+            >
+              <i className="fa-solid fa-user-plus w-5" />
+              <span>Register</span>
+            </Link>
+          </>
+        ) : (
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-all duration-200 hover:bg-red-700 hover:text-white text-emerald-100"
+          >
+            <i className="fa-solid fa-sign-out-alt w-5" />
+            <span>Logout</span>
+          </button>
+        )}
       </nav>
 
+      {user && (
       <div className="border-t border-emerald-700 p-4">
         <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 transition-all duration-200 cursor-pointer">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-bold text-emerald-900">
-            JD
-          </div>
+          {user.avatar ? (
+            <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full object-cover" />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-bold text-emerald-900">
+              {getInitials(user.name)}
+            </div>
+          )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">John Donor</p>
-            <p className="text-xs text-emerald-200 truncate">john@example.com</p>
+            <p className="text-sm font-semibold truncate">{user.name}</p>
+            <p className="text-xs text-emerald-200 truncate">{user.email}</p>
           </div>
           <button type="button" className="p-1 hover:bg-emerald-600 rounded transition-colors">
             <i className="fa-solid fa-chevron-down text-xs" />
           </button>
         </div>
       </div>
+      )}
     </div>
     </>
   );

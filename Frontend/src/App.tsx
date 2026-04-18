@@ -3,9 +3,12 @@ import { Layout } from './components/layout/Layout';
 import { DiscoverLayout } from './components/layout/DiscoverLayout';
 import { AuthLayout } from './components/layout/AuthLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { Toaster } from './components/ui/Toaster';
+import { SessionExpiredModal } from './components/SessionExpiredModal';
 import { LandingPage } from './pages/LandingPage';
 import { LoginRegister } from './pages/LoginRegister';
 import { RegisterPage } from './pages/RegisterPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { CampaignsPage } from './pages/CampaignsPage';
 import { CampaignDetailsPage } from './pages/CampaignDetailsPage';
 import { FeaturedCampaignsPage } from './pages/FeaturedCampaignsPage';
@@ -34,16 +37,21 @@ import { PlatformAnalyticsPage } from './pages/admin/PlatformAnalyticsPage';
 import { ManagePaymentsPage } from './pages/admin/ManagePaymentsPage';
 import { ManageCategoriesPage } from './pages/admin/ManageCategoriesPage';
 import { ManageTagsPage } from './pages/admin/ManageTagsPage';
+import { DonationSuccessPage } from './pages/DonationSuccessPage';
+import { DonationCancelPage } from './pages/DonationCancelPage';
 
 function App() {
   return (
-    <BrowserRouter>
+    <>
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<LandingPage />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="campaigns/featured" element={<FeaturedCampaignsPage />} />
           <Route path="campaigns/:id" element={<CampaignDetailsPage />} />
+          <Route path="donation/success" element={<DonationSuccessPage />} />
+          <Route path="donation/cancel" element={<DonationCancelPage />} />
 
           <Route path="/donor" element={<ProtectedRoute roles={['donor']}><Outlet /></ProtectedRoute>}>
             <Route path="dashboard" element={<DonorDashboardPage />} />
@@ -86,11 +94,15 @@ function App() {
         </Route>
 
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
         <Route path="/404" element={<NotFoundPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+      <Toaster />
+      <SessionExpiredModal />
+    </>
   );
 }
 

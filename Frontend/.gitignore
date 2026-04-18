@@ -31,4 +31,8 @@ Thumbs.db
 *.tsbuildinfo
 
 # Vite
+<<<<<<< HEAD
 *.local
+=======
+*.local 
+>>>>>>> 02d1b7d2f4566347890a47669cee58ef2bb5746f

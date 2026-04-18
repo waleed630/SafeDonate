@@ -1,4 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CampaignCard } from '../components/CampaignCard';
+import api from '../api/axios';
+import { useCategories } from '../contexts/CategoriesContext';
 
 const categories = [
   { icon: 'fa-heart-pulse', label: 'Medical', bg: 'bg-emerald-50', text: 'text-emerald-600', hoverBg: 'group-hover:bg-emerald-600', hoverText: 'group-hover:text-emerald-700' },
@@ -9,85 +13,75 @@ const categories = [
   { icon: 'fa-leaf', label: 'Environment', bg: 'bg-teal-50', text: 'text-teal-600', hoverBg: 'group-hover:bg-teal-600', hoverText: 'group-hover:text-teal-700' },
 ];
 
-const campaigns = [
-  {
-    id: 1,
-    image: 'https://images.pexels.com/photos/4386467/pexels-photo-4386467.jpeg?auto=compress&cs=tinysrgb&w=800',
-    category: 'Medical',
-    categoryIcon: 'fa-heart-pulse',
-    categoryBadge: 'text-emerald-700',
-    titleHover: 'group-hover:text-emerald-700',
-    avatar: 'https://i.pravatar.cc/150?u=12',
-    author: 'Sarah Mitchell',
-    title: 'Urgent Heart Surgery for Little Leo',
-    description: 'Leo was born with a congenital heart defect. We need your help to fund his life-saving surgery scheduled for next month.',
-    raised: 12450,
-    goal: 15000,
-    percent: 83,
-  },
-  {
-    id: 2,
-    image: 'https://images.pexels.com/photos/5212345/pexels-photo-5212345.jpeg?auto=compress&cs=tinysrgb&w=800',
-    category: 'Education',
-    categoryIcon: 'fa-book-open',
-    categoryBadge: 'text-blue-700',
-    titleHover: 'group-hover:text-blue-700',
-    avatar: 'https://i.pravatar.cc/150?u=44',
-    author: 'David Kim',
-    title: 'Tech Lab for Rural High School',
-    description: 'Help us provide 50 laptops and coding resources to underprivileged students in rural districts to bridge the digital divide.',
-    raised: 5200,
-    goal: 11500,
-    percent: 45,
-  },
-  {
-    id: 3,
-    image: 'https://images.pexels.com/photos/414928/pexels-photo-414928.jpeg?auto=compress&cs=tinysrgb&w=800',
-    category: 'Environment',
-    categoryIcon: 'fa-leaf',
-    categoryBadge: 'text-teal-700',
-    titleHover: 'group-hover:text-teal-700',
-    avatar: 'https://i.pravatar.cc/150?u=88',
-    author: 'Green Earth Org',
-    title: 'Community Solar Power Project',
-    description: 'Installing solar panels on the community center roof to reduce carbon footprint and energy costs for local non-profits.',
-    raised: 28900,
-    goal: 30000,
-    percent: 96,
-  },
-  {
-    id: 4,
-    image: 'https://images.pexels.com/photos/1667843/pexels-photo-1667843.jpeg?auto=compress&cs=tinysrgb&w=800',
-    category: 'Animals',
-    categoryIcon: 'fa-paw',
-    categoryBadge: 'text-amber-700',
-    titleHover: 'group-hover:text-amber-700',
-    avatar: 'https://i.pravatar.cc/150?u=22',
-    author: 'Animal Rescue Co',
-    title: 'Save Shelter Dogs This Winter',
-    description: 'We need funds for heated shelters, food, and medical care for 200 dogs at our rescue center during the cold months.',
-    raised: 8900,
-    goal: 20000,
-    percent: 45,
-  },
-  {
-    id: 5,
-    image: 'https://images.pexels.com/photos/3184291/pexels-photo-3184291.jpeg?auto=compress&cs=tinysrgb&w=800',
-    category: 'Creative',
-    categoryIcon: 'fa-palette',
-    categoryBadge: 'text-purple-700',
-    titleHover: 'group-hover:text-purple-700',
-    avatar: 'https://i.pravatar.cc/150?u=55',
-    author: 'Arts Collective',
-    title: 'Community Mural Project',
-    description: 'Bringing local artists together to paint a 100ft mural celebrating our neighborhood heritage and diversity.',
-    raised: 15000,
-    goal: 18000,
-    percent: 83,
-  },
-];
+interface Campaign {
+  _id: string;
+  title: string;
+  description: string;
+  category: string;
+  images?: string[];
+  goalAmount: number;
+  raisedAmount?: number;
+  progress?: number;
+  verified: boolean;
+  tags?: string[];
+  createdAt: string;
+  donorCount?: number;
+  fundraiser: {
+    _id: string;
+    username: string;
+    email: string;
+  };
+}
 
 export function LandingPage() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
+  const [campaignsError, setCampaignsError] = useState<string | null>(null);
+  const { categories: categoryStyles } = useCategories();
+
+  const getCategoryStyles = (categoryName: string) => {
+    const category = categoryStyles.find(
+      (c) => c.label.toLowerCase() === categoryName.toLowerCase(),
+    );
+    if (category) {
+      return {
+        icon: category.icon,
+        badge: category.badge,
+        hover: `group-hover:text-${category.badge.split('-')[1]}-700`,
+      };
+    }
+
+    return {
+      icon: 'fa-heart',
+      badge: 'text-emerald-700',
+      hover: 'group-hover:text-emerald-700',
+    };
+  };
+
+  useEffect(() => {
+    const fetchCampaigns = async () => {
+      try {
+        setLoadingCampaigns(true);
+        setCampaignsError(null);
+        const response = await api.get('/campaigns', {
+          params: {
+            sort: 'newest',
+          },
+        });
+
+        const campaignList = response.data.campaigns || response.data.results || [];
+        setCampaigns(Array.isArray(campaignList) ? campaignList : []);
+      } catch (err: any) {
+        setCampaignsError(err.response?.data?.message || 'Unable to load campaigns. Please try again.');
+        setCampaigns([]);
+      } finally {
+        setLoadingCampaigns(false);
+      }
+    };
+
+    fetchCampaigns();
+  }, [categoryStyles]);
+
   return (
     <>
       <section id="section-hero" className="relative min-h-[500px] sm:h-[600px] md:h-[650px] w-full flex items-center justify-center overflow-hidden">
@@ -219,78 +213,63 @@ export function LandingPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-          {campaigns.slice(0, 3).map((campaign) => (
-            <article
-              key={campaign.id}
-              className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 flex flex-col h-full"
-            >
-              <div className="relative h-56 overflow-hidden">
-                <img
-                  src={campaign.image}
-                  alt={campaign.title}
-                  className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500"
-                />
-                <div className={`absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold ${campaign.categoryBadge} shadow-sm`}>
-                  <i className={`fa-solid ${campaign.categoryIcon} mr-1`} /> {campaign.category}
-                </div>
-                <button type="button" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/20 backdrop-blur-sm text-white flex items-center justify-center hover:bg-rose-500 transition-colors">
-                  <i className="fa-regular fa-heart" />
-                </button>
-              </div>
+        {loadingCampaigns ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+          </div>
+        ) : campaignsError ? (
+          <div className="text-center py-12">
+            <p className="text-slate-500 mb-4">{campaignsError}</p>
+            <Link to="/campaigns" className="inline-block px-8 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors">
+              Browse All Campaigns
+            </Link>
+          </div>
+        ) : campaigns.length === 0 ? (
+          <div className="text-center py-12">
+            <p className="text-slate-500 mb-4">No verified campaigns available at the moment.</p>
+            <Link to="/campaigns" className="inline-block px-8 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition-colors">
+              Browse All Campaigns
+            </Link>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
+              {campaigns.slice(0, 3).map((campaign) => {
+                const categoryStyle = getCategoryStyles(campaign.category);
+                return (
+                  <CampaignCard
+                    key={campaign._id}
+                    campaign={{
+                      id: campaign._id,
+                      fundraiserId: campaign.fundraiser._id,
+                      image: campaign.images?.[0] || 'https://via.placeholder.com/400x300?text=Campaign',
+                      category: campaign.category,
+                      categoryIcon: categoryStyle.icon,
+                      categoryBadge: categoryStyle.badge,
+                      titleHover: categoryStyle.hover,
+                      avatar: `https://i.pravatar.cc/150?u=${campaign.fundraiser._id}`,
+                      author: campaign.fundraiser.username,
+                      title: campaign.title,
+                      description: campaign.description,
+                      raised: campaign.raisedAmount || 0,
+                      goal: campaign.goalAmount,
+                      percent: campaign.progress || Math.round(((campaign.raisedAmount || 0) / campaign.goalAmount) * 100),
+                    }}
+                  />
+                );
+              })}
+            </div>
 
-              <div className="p-6 flex-1 flex flex-col">
-                <div className="flex items-center gap-3 mb-3">
-                  <img src={campaign.avatar} alt={campaign.author} className="w-8 h-8 rounded-full border-2 border-white shadow-sm" />
-                  <span className="text-sm text-slate-500">
-                    by <span className="text-slate-800 font-medium">{campaign.author}</span>
-                  </span>
-                </div>
-
-                <h3 className={`text-xl font-bold text-slate-800 mb-2 ${campaign.titleHover} transition-colors line-clamp-2`}>
-                  {campaign.title}
-                </h3>
-                <p className="text-slate-500 text-sm mb-6 line-clamp-2">{campaign.description}</p>
-
-                <div className="mt-auto space-y-4">
-                  <div>
-                    <div className="flex justify-between text-sm font-semibold mb-2">
-                      <span className="text-emerald-600">${campaign.raised.toLocaleString()} raised</span>
-                      <span className="text-slate-400">{campaign.percent}%</span>
-                    </div>
-                    <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full relative overflow-hidden"
-                        style={{ width: `${campaign.percent}%` }}
-                      >
-                        {campaign.percent === 83 && (
-                          <div className="absolute inset-0 bg-white/20 animate-[shimmer_2s_infinite]" />
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-400 text-right">Goal: ${campaign.goal.toLocaleString()}</div>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="w-full py-3 rounded-xl border-2 border-emerald-100 text-emerald-700 font-bold hover:bg-emerald-50 hover:border-emerald-200 transition-all active:scale-[0.98]"
-                  >
-                    Donate Now
-                  </button>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-
-        <div className="mt-12 text-center">
-          <Link
-            to="/campaigns"
-            className="inline-block px-8 py-3 bg-white border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 hover:text-emerald-600 transition-colors shadow-sm"
-          >
-            See All Campaigns
-          </Link>
-        </div>
+            <div className="mt-12 text-center">
+              <Link
+                to="/campaigns"
+                className="inline-block px-8 py-3 bg-white border border-slate-200 text-slate-600 font-semibold rounded-lg hover:bg-slate-50 hover:text-emerald-600 transition-colors shadow-sm"
+              >
+                See All Campaigns
+              </Link>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="bg-emerald-900 text-white py-12 sm:py-16 md:py-20 px-4 sm:px-6 md:px-8 relative overflow-hidden">

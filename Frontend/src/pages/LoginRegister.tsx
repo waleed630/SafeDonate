@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../hooks/use-toast';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/Dialog';
 import type { UserRole } from '../types';
+
+const BACKEND_URL = 'http://localhost:5000';
 
 type AuthTab = 'login' | 'register';
 type Role = UserRole;
@@ -10,10 +21,19 @@ export function LoginRegister() {
   const [activeTab, setActiveTab] = useState<AuthTab>('login');
   const [role, setRole] = useState<Role>('donor');
   const [showPassword, setShowPassword] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [welcomeUser, setWelcomeUser] = useState('');
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
   const { login, register } = useAuth() as any;
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
+
+  const handleGoogleLogin = () => {
+    // Redirect to backend Google OAuth endpoint with selected role
+    window.location.href = `${BACKEND_URL}/api/auth/google?role=${role}`;
+  };
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -108,16 +128,58 @@ export function LoginRegister() {
             <div className="animate-fade-in">
               <form className="space-y-6" onSubmit={async (e) => {
                 e.preventDefault();
-                const form = e.target as HTMLFormElement;
-                const email = (form.querySelector('#login-email') as HTMLInputElement)?.value || 'donor@example.com';
-                const password = (form.querySelector('#login-password') as HTMLInputElement)?.value || 'password';
-                await login(email, password, role === 'admin' ? 'admin' : role === 'fundraiser' ? 'fundraiser' : 'donor');
-                const dest = from || (role === 'admin' ? '/admin/dashboard' : role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard');
-                navigate(dest, { replace: true });
+                try {
+                  const form = e.target as HTMLFormElement;
+                  const email = (form.querySelector('#login-email') as HTMLInputElement)?.value || 'donor@example.com';
+                  const password = (form.querySelector('#login-password') as HTMLInputElement)?.value || 'password';
+                  
+                  await login(email, password, role === 'admin' ? 'admin' : role === 'fundraiser' ? 'fundraiser' : 'donor');
+                  
+                  // Extract name from email or use generic greeting
+                  const userName = email.split('@')[0];
+                  setWelcomeUser(userName);
+                  setShowWelcomeModal(true);
+
+                  // Show success toast
+                  toast({
+                    title: '✨ Welcome Back!',
+                    description: `You've successfully logged in as a ${role}.`,
+                    variant: 'success',
+                  });
+
+                  const getDefaultDestination = (userRole: Role) => {
+                    if (userRole === 'admin') return '/admin/dashboard';
+                    if (userRole === 'fundraiser') return '/fundraiser/dashboard';
+                    return '/donor/dashboard';
+                  };
+
+                  const shouldUseFromDestination = (fromPath?: string, userRole?: Role) => {
+                    if (!fromPath || !userRole) return false;
+                    const rolePrefix = userRole === 'admin' ? '/admin' : userRole === 'fundraiser' ? '/fundraiser' : '/donor';
+
+                    // Allow returning to public pages or same-role protected pages only.
+                    return fromPath.startsWith(rolePrefix) || fromPath === '/' || fromPath.startsWith('/campaigns') || fromPath.startsWith('/donation');
+                  };
+
+                  // Navigate after a short delay to let user see the modal
+                  setTimeout(() => {
+                    const dest = shouldUseFromDestination(from, role) && from
+                      ? from
+                      : getDefaultDestination(role);
+                    navigate(dest, { replace: true });
+                  }, 2000);
+                } catch (err: any) {
+                  toast({
+                    title: '❌ Login Failed',
+                    description: err?.response?.data?.message || err?.message || 'Invalid credentials',
+                    variant: 'destructive',
+                  });
+                }
               }}>
                 <div className="grid grid-cols-2 gap-4">
                   <button
                     type="button"
+                    onClick={handleGoogleLogin}
                     className="flex items-center justify-center gap-3 px-4 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 group"
                   >
                     <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="Google" />
@@ -189,9 +251,13 @@ export function LoginRegister() {
                     </button>
                   </div>
                   <div className="flex justify-end">
-                    <a href="#" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline">
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotPasswordModal(true)}
+                      className="text-sm font-medium text-emerald-600 hover:text-emerald-700 hover:underline transition-colors"
+                    >
                       Forgot password?
-                    </a>
+                    </button>
                   </div>
                 </div>
 
@@ -212,14 +278,34 @@ export function LoginRegister() {
                 className="space-y-6"
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  const form = e.target as HTMLFormElement;
-                  const email = (form.querySelector('#reg-email') as HTMLInputElement)?.value;
-                  const password = (form.querySelector('#reg-password') as HTMLInputElement)?.value;
-                  const username = ((form.querySelector('#reg-fname') as HTMLInputElement)?.value || '') + ' ' + ((form.querySelector('#reg-lname') as HTMLInputElement)?.value || '');
-                  await register({ email, password, username, role });
-                  // After register, redirect to dashboard based on role
-                  const dest = role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
-                  navigate(dest, { replace: true });
+                  try {
+                    const form = e.target as HTMLFormElement;
+                    const email = (form.querySelector('#reg-email') as HTMLInputElement)?.value;
+                    const password = (form.querySelector('#reg-password') as HTMLInputElement)?.value;
+                    const username = ((form.querySelector('#reg-fname') as HTMLInputElement)?.value || '') + ' ' + ((form.querySelector('#reg-lname') as HTMLInputElement)?.value || '');
+                    await register({ email, password, username, role });
+                    
+                    // Show success toast
+                    toast({
+                      title: '✨ Success!',
+                      description: `Welcome to SafeDonate! You've been registered as a ${role}.`,
+                      variant: 'success',
+                    });
+                    
+                    // After register, redirect to dashboard based on role
+                    const dest = role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
+                    navigate(dest, { replace: true });
+                  } catch (err: any) {
+                    const errorMessage = err?.response?.data?.message || err?.message || 'Registration failed. Please try again.';
+                    const existingRole = err?.response?.data?.existingRole;
+
+                    // Show error toast
+                    toast({
+                      title: existingRole ? '⚠️ Already Registered' : '❌ Registration Failed',
+                      description: errorMessage,
+                      variant: 'destructive',
+                    });
+                  }
                 }}
               >
                 <div className="space-y-3">
@@ -393,6 +479,37 @@ export function LoginRegister() {
           </div>
         </div>
       </div>
+
+      {/* Welcome Modal */}
+      <Dialog open={showWelcomeModal} onOpenChange={setShowWelcomeModal}>
+        <DialogContent className="max-w-md text-center">
+          <DialogHeader className="text-center">
+            <div className="mx-auto mb-4 w-16 h-16 bg-gradient-to-br from-emerald-400 to-emerald-600 rounded-full flex items-center justify-center">
+              <i className="fa-solid fa-check text-white text-2xl" />
+            </div>
+            <DialogTitle className="text-2xl">Welcome, {welcomeUser}! 🎉</DialogTitle>
+            <DialogDescription className="mt-2 text-base">
+              You've successfully logged in to SafeDonate. Get ready to make a difference!
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-6 space-y-3">
+            <p className="text-sm text-gray-600">
+              redirecting to your {role === 'fundraiser' ? 'fundraiser' : 'donor'} dashboard...
+            </p>
+            <div className="flex items-center justify-center gap-1">
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }} />
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }} />
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPasswordModal}
+        onClose={() => setShowForgotPasswordModal(false)}
+      />
     </div>
   );
 }

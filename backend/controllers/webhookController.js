@@ -5,6 +5,15 @@ import Campaign from '../models/Campaign.js';
 import logger from '../utils/logger.js';
 
 export const stripeWebhook = async (req, res) => {
+    // Check if Stripe is properly initialized
+    if (!stripe) {
+        logger.error('Stripe webhook handler called but Stripe not configured');
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Stripe is not configured.' 
+        });
+    }
+
     const sig = req.headers['stripe-signature'];
     let event;
 
@@ -19,14 +28,22 @@ export const stripeWebhook = async (req, res) => {
         return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
+    // ✅ Only handle successful checkout
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
+
+        // Find donation
         const donation = await Donation.findOne({ stripeSessionId: session.id });
 
-        if (donation) {
+        if (donation && donation.status !== 'completed') {   // ← Prevents double processing
+            // === NEW FIELDS FOR TRANSPARENT TRACKING ===
             donation.status = 'completed';
+            donation.stripePaymentIntentId = session.payment_intent;   // For receipt
+            donation.receiptUrl = session.receipt_url;                 // Direct Stripe receipt link
+
             await donation.save();
 
+            // Real-time campaign update
             const campaign = await Campaign.findById(donation.campaign);
             if (campaign) {
                 campaign.raisedAmount += donation.amount;
@@ -34,8 +51,10 @@ export const stripeWebhook = async (req, res) => {
                 await campaign.save();
             }
 
-            // Send confirmation email (implement SMTP later)
-            logger.info(`Donation completed: ID ${donation._id}, amount ${donation.amount}`);
+            logger.info(`✅ Donation completed & campaign updated | 
+                Donation ID: ${donation._id} | 
+                Amount: ${donation.amount} | 
+                Campaign: ${campaign?.title}`);
         }
     }
 

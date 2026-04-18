@@ -23,28 +23,86 @@ const BADGE_OPTIONS = [
 ];
 
 export function ManageCategoriesPage() {
-  const { categories, addCategory, updateCategory, activate, deactivate } = useCategories();
+  const { categories, addCategory, updateCategory, activate, deactivate, loading, error } = useCategories();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<CategoryItem | null>(null);
-  const [form, setForm] = useState({ id: '', label: '', icon: 'fa-leaf', badge: 'text-teal-700', hover: 'group-hover:text-teal-700' });
+  const [form, setForm] = useState({ label: '', slug: '', icon: 'fa-leaf', badge: 'text-teal-700' });
+  const [formLoading, setFormLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const handleAdd = () => {
-    if (!form.id.trim() || !form.label.trim()) return;
-    addCategory({
-      id: form.id.trim().toLowerCase().replace(/\s+/g, '-'),
-      label: form.label.trim(),
-      icon: form.icon,
-      badge: form.badge,
-      hover: form.hover,
-    });
-    setForm({ id: '', label: '', icon: 'fa-leaf', badge: 'text-teal-700', hover: 'group-hover:text-teal-700' });
-    setShowAdd(false);
+  const clearMessages = () => {
+    setFormError(null);
+    setSuccessMessage(null);
   };
 
-  const handleSaveEdit = () => {
-    if (!editing) return;
-    updateCategory(editing.id, { label: form.label, icon: form.icon, badge: form.badge, hover: form.hover });
-    setEditing(null);
+  const handleAdd = async () => {
+    if (!form.label.trim()) {
+      setFormError('Label is required');
+      return;
+    }
+    try {
+      setFormLoading(true);
+      clearMessages();
+      await addCategory({
+        label: form.label.trim(),
+        slug: form.slug.trim(),
+        icon: form.icon,
+        badge: form.badge,
+      });
+      setForm({ label: '', slug: '', icon: 'fa-leaf', badge: 'text-teal-700' });
+      setShowAdd(false);
+      setSuccessMessage('Category added successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to add category');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing || !form.label.trim()) {
+      setFormError('Label is required');
+      return;
+    }
+    try {
+      setFormLoading(true);
+      clearMessages();
+      await updateCategory(editing._id || editing.id, {
+        label: form.label,
+        slug: form.slug,
+        icon: form.icon,
+        badge: form.badge,
+      });
+      setEditing(null);
+      setSuccessMessage('Category updated successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to update category');
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleDeactivate = async (cat: CategoryItem) => {
+    try {
+      await deactivate(cat._id || cat.id);
+      setSuccessMessage('Category deactivated successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to deactivate category');
+    }
+  };
+
+  const handleActivate = async (cat: CategoryItem) => {
+    try {
+      await activate(cat._id || cat.id);
+      setSuccessMessage('Category activated successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to activate category');
+    }
   };
 
   return (
@@ -52,104 +110,138 @@ export function ManageCategoriesPage() {
       <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-2">Campaign Categories</h1>
       <p className="text-slate-500 mb-8">Create and manage categories for campaigns</p>
 
+      {error && (
+        <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-700 text-sm">
+          {successMessage}
+        </div>
+      )}
+
       <div className="flex justify-end mb-6">
         <button
           type="button"
-          onClick={() => setShowAdd(true)}
-          className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+          onClick={() => {
+            setShowAdd(true);
+            clearMessages();
+          }}
+          disabled={loading}
+          className="px-4 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <i className="fa-solid fa-plus mr-2" /> Add Category
         </button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Label</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">ID / Slug</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.sort((a, b) => a.order - b.order).map((c) => (
-                <tr key={c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
-                  <td className="px-4 py-4">
-                    <span className={`${c.badge} font-medium`}>
-                      <i className={`fa-solid ${c.icon} mr-2`} />
-                      {c.label}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 font-mono text-sm text-slate-600">{c.id}</td>
-                  <td className="px-4 py-4">
-                    <span
-                      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                        c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {c.active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditing(c);
-                        setForm({ id: c.id, label: c.label, icon: c.icon, badge: c.badge, hover: c.hover });
-                      }}
-                      className="text-emerald-600 hover:text-emerald-700 text-sm font-medium mr-3"
-                    >
-                      Edit
-                    </button>
-                    {c.active ? (
-                      <button
-                        type="button"
-                        onClick={() => deactivate(c.id)}
-                        className="text-amber-600 hover:text-amber-700 text-sm font-medium"
-                      >
-                        Deactivate
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => activate(c.id)}
-                        className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
-                      >
-                        Activate
-                      </button>
-                    )}
-                  </td>
+        {loading ? (
+          <div className="p-8 text-center text-slate-500">
+            <i className="fa-solid fa-spinner fa-spin mr-2" /> Loading categories...
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Label</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Slug</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {categories.sort((a, b) => a.order - b.order).map((c) => (
+                  <tr key={c._id || c.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                    <td className="px-4 py-4">
+                      <span className={`${c.badge} font-medium`}>
+                        <i className={`fa-solid ${c.icon} mr-2`} />
+                        {c.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 font-mono text-sm text-slate-600">{c.slug}</td>
+                    <td className="px-4 py-4">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                          c.active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {c.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditing(c);
+                          setForm({ label: c.label, slug: c.slug, icon: c.icon, badge: c.badge });
+                          clearMessages();
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700 text-sm font-medium mr-3"
+                      >
+                        Edit
+                      </button>
+                      {c.active ? (
+                        <button
+                          type="button"
+                          onClick={() => handleDeactivate(c)}
+                          className="text-amber-600 hover:text-amber-700 text-sm font-medium"
+                        >
+                          Deactivate
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleActivate(c)}
+                          className="text-emerald-600 hover:text-emerald-700 text-sm font-medium"
+                        >
+                          Activate
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {showAdd && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Add Category</h3>
+            {formError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                {formError}
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Label</label>
                 <input
                   type="text"
                   value={form.label}
-                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value, id: f.id || e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, label: e.target.value }));
+                    setFormError(null);
+                  }}
                   placeholder="e.g. Medical"
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">ID / Slug</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Slug</label>
                 <input
                   type="text"
-                  value={form.id}
-                  onChange={(e) => setForm((f) => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '-') }))}
-                  placeholder="medical"
+                  value={form.slug}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, slug: e.target.value }));
+                    setFormError(null);
+                  }}
+                  placeholder="e.g. medical"
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
               </div>
@@ -169,7 +261,7 @@ export function ManageCategoriesPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Badge color class</label>
                 <select
                   value={form.badge}
-                  onChange={(e) => setForm((f) => ({ ...f, badge: e.target.value, hover: `group-hover:${e.target.value}` }))}
+                  onChange={(e) => setForm((f) => ({ ...f, badge: e.target.value }))}
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 >
                   {BADGE_OPTIONS.map((b) => (
@@ -181,16 +273,23 @@ export function ManageCategoriesPage() {
             <div className="flex gap-3 mt-6">
               <button
                 type="button"
-                onClick={() => setShowAdd(false)}
-                className="flex-1 py-2 border border-slate-200 rounded-xl text-slate-700 font-medium hover:bg-slate-50"
+                onClick={() => {
+                  setShowAdd(false);
+                  setForm({ label: '', slug: '', icon: 'fa-leaf', badge: 'text-teal-700' });
+                  clearMessages();
+                }}
+                disabled={formLoading}
+                className="flex-1 py-2 border border-slate-200 rounded-xl text-slate-700 font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleAdd}
-                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700"
+                disabled={formLoading}
+                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                {formLoading ? <i className="fa-solid fa-spinner fa-spin mr-2" /> : null}
                 Add
               </button>
             </div>
@@ -202,13 +301,33 @@ export function ManageCategoriesPage() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-bold text-slate-900 mb-4">Edit Category</h3>
+            {formError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-sm">
+                {formError}
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Label</label>
                 <input
                   type="text"
                   value={form.label}
-                  onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, label: e.target.value }));
+                    setFormError(null);
+                  }}
+                  className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Slug</label>
+                <input
+                  type="text"
+                  value={form.slug}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, slug: e.target.value }));
+                    setFormError(null);
+                  }}
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 />
               </div>
@@ -228,7 +347,7 @@ export function ManageCategoriesPage() {
                 <label className="block text-sm font-medium text-slate-700 mb-1">Badge color</label>
                 <select
                   value={form.badge}
-                  onChange={(e) => setForm((f) => ({ ...f, badge: e.target.value, hover: `group-hover:${e.target.value}` }))}
+                  onChange={(e) => setForm((f) => ({ ...f, badge: e.target.value }))}
                   className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
                 >
                   {BADGE_OPTIONS.map((b) => (
@@ -240,16 +359,22 @@ export function ManageCategoriesPage() {
             <div className="flex gap-3 mt-6">
               <button
                 type="button"
-                onClick={() => setEditing(null)}
-                className="flex-1 py-2 border border-slate-200 rounded-xl text-slate-700 font-medium hover:bg-slate-50"
+                onClick={() => {
+                  setEditing(null);
+                  clearMessages();
+                }}
+                disabled={formLoading}
+                className="flex-1 py-2 border border-slate-200 rounded-xl text-slate-700 font-medium hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveEdit}
-                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700"
+                disabled={formLoading}
+                className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
+                {formLoading ? <i className="fa-solid fa-spinner fa-spin mr-2" /> : null}
                 Save
               </button>
             </div>

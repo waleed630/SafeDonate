@@ -1,8 +1,28 @@
 import { Link } from 'react-router-dom';
-import { campaigns } from '../../data/campaigns';
-import { getDonationsByUser } from '../../data/mockData';
+import { useEffect, useState } from 'react';
 import { CampaignCard } from '../CampaignCard';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../api/axios';
+
+interface Campaign {
+  _id: string;
+  title: string;
+  description: string;
+  category: string;
+  images: string[];
+  goalAmount: number;
+  raisedAmount?: number;
+  fundraiser: {
+    _id: string;
+    username: string;
+    email: string;
+  };
+  progress?: number;
+  verified: boolean;
+  status: string;
+  createdAt: string;
+  donorCount?: number;
+}
 
 interface RecommendedCampaignsProps {
   title?: string;
@@ -11,9 +31,8 @@ interface RecommendedCampaignsProps {
 }
 
 /**
- * Renders personalized or suggested campaigns.
- * If user is logged in as donor, uses donation history to prefer campaigns in categories they supported.
- * Otherwise shows a curated subset (e.g. by progress or shuffle).
+ * Renders personalized or suggested verified campaigns.
+ * Fetches from backend to ensure showing only campaigns created by fundraisers and verified by admin.
  */
 export function RecommendedCampaigns({
   title = 'Recommended for you',
@@ -21,21 +40,36 @@ export function RecommendedCampaigns({
   className = '',
 }: RecommendedCampaignsProps) {
   const { user } = useAuth();
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  let recommended = campaigns;
-  if (user?.id && user.role === 'donor') {
-    const donations = getDonationsByUser(user.id);
-    const preferredCampaignIds = [...new Set(donations.map((d) => d.campaignId))];
-    const preferredCategories = [...new Set(donations.map((d) => d.campaign))];
-    const byCategory = campaigns.filter((c) =>
-      preferredCategories.some((name) => name.toLowerCase().includes(c.category.toLowerCase()))
-    );
-    const byCampaign = campaigns.filter((c) => preferredCampaignIds.includes(c.id));
-    recommended = byCategory.length > 0 ? byCategory : byCampaign.length > 0 ? byCampaign : campaigns;
-  }
+  useEffect(() => {
+    const fetchRecommendedCampaigns = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/campaigns', {
+          params: {
+            sort: 'newest',
+          }
+        });
 
-  const display = recommended.slice(0, maxItems);
-  if (display.length === 0) return null;
+        if (response.data.success && response.data.campaigns) {
+          setCampaigns(response.data.campaigns);
+        }
+      } catch (err) {
+        console.error('Error fetching recommended campaigns:', err);
+        setCampaigns([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRecommendedCampaigns();
+  }, [user]);
+
+  if (loading || campaigns.length === 0) return null;
+
+  const display = campaigns.slice(0, maxItems);
 
   return (
     <section className={className}>
@@ -50,7 +84,25 @@ export function RecommendedCampaigns({
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {display.map((campaign) => (
-          <CampaignCard key={campaign.id} campaign={campaign} />
+          <CampaignCard 
+            key={campaign._id} 
+            campaign={{
+              id: campaign._id,
+              fundraiserId: campaign.fundraiser._id,
+              image: campaign.images?.[0] || 'https://via.placeholder.com/400x300?text=Campaign',
+              category: campaign.category,
+              categoryIcon: 'fa-heart-pulse',
+              categoryBadge: 'text-emerald-700',
+              titleHover: 'group-hover:text-emerald-700',
+              avatar: 'https://i.pravatar.cc/150?u=' + campaign.fundraiser._id,
+              author: campaign.fundraiser.username,
+              title: campaign.title,
+              description: campaign.description,
+              raised: campaign.raisedAmount || 0,
+              goal: campaign.goalAmount,
+              percent: campaign.progress || Math.round(((campaign.raisedAmount || 0) / campaign.goalAmount) * 100),
+            }} 
+          />
         ))}
       </div>
     </section>

@@ -20,18 +20,39 @@ const registerUser = async (req, res) => {
 
         const { email, password, username, role } = req.body;
 
-        // Check if user exists
-        let user = await User.findOne({ $or: [{ email }, { username }] });
+        // Normalize email - lowercase and trim
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        // Check if user exists - search for exact email match (case-insensitive handled by schema lowercase)
+        let user = await User.findOne({ email: normalizedEmail });
         if (user) {
-            logger.warn("User already exists: %s", email);
+            logger.warn("User already exists with email: %s", normalizedEmail);
+            
+            // Check if trying to register with a different role
+            const requestedRole = role || "donor";
+            if (user.role !== requestedRole) {
+                return res.status(400).json({
+                    success: false,
+                    message: `You have already registered as a ${user.role}. Please login with that role or use a different email.`,
+                    existingRole: user.role,
+                });
+            }
+            
             return res.status(400).json({
                 success: false,
-                message: "User already exists",
+                message: "This email is already registered. Please login or use a different email.",
             });
         }
 
-        // Create new user (role may be provided by frontend; defaults to "donor" in schema)
-        user = new User({ username, email, password, role });
+        // Username is not required to be unique - only email must be unique
+
+        // Create new user with role from frontend (defaults to "donor" in schema if not provided)
+        user = new User({ 
+            username: username?.trim() || '',
+            email: normalizedEmail, 
+            password, 
+            role: role || "donor"
+        });
         await user.save();
 
         // Generate tokens
@@ -46,14 +67,13 @@ const registerUser = async (req, res) => {
                 userId: user._id,
                 username: user.username,
                 email: user.email,
-                role: user.role,           // ← IMPORTANT for SafeDonate
-            },
-            accessToken,
-            refreshToken,
+                role: user.role,
+                profilePicture: user.profilePicture
+            }
         });
     } catch (e) {
         logger.error("Error in registration: %s", e.message);
-        res.status(500).json({ success: false, message: "Server error" });
+        res.status(500).json({ success: false, message: "Server error: " + e.message });
     }
 };
 
@@ -70,7 +90,7 @@ const loginUser = async (req, res) => {
             });
         }
 
-        const { email, password } = req.body;
+        const { email, password, role } = req.body;
         const user = await User.findOne({ email });
 
         if (!user) {
@@ -78,6 +98,15 @@ const loginUser = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Invalid credentials",
+            });
+        }
+
+        // Check if selected role matches user's actual role (if role is provided)
+        if (role && user.role !== role) {
+            logger.warn("Role mismatch for email: %s. Expected: %s, Selected: %s", email, user.role, role);
+            return res.status(400).json({
+                success: false,
+                message: `This account is registered as a ${user.role}. Please select "${user.role}" to login.`,
             });
         }
 
@@ -103,18 +132,20 @@ const loginUser = async (req, res) => {
 
         logger.info("User logged in successfully: %s (role: %s)", user._id, user.role);
 
-        res.json({
+        // Return minimal response without large fields (tokens are in HttpOnly cookies)
+        const responseData = {
             success: true,
             message: "Login successful",
             user: {
                 userId: user._id,
                 username: user.username,
                 email: user.email,
-                role: user.role,           // ← IMPORTANT for SafeDonate
-            },
-            accessToken,
-            refreshToken,
-        });
+                role: user.role,
+                profilePicture: user.profilePicture
+            }
+        };
+
+        res.json(responseData);
     } catch (e) {
         logger.error("Error in Login: %s", e.message);
         res.status(500).json({ success: false, message: "Server error" });
@@ -152,9 +183,8 @@ const refreshTokenUser = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-            },
-            accessToken,
-            refreshToken: newRefreshToken,
+                profilePicture: user.profilePicture
+            }
         });
     } catch (e) {
         logger.error("Error in refresh token: %s", e.message);

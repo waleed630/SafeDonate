@@ -14,6 +14,7 @@ const validateLogin = (data) => {
     const schema = Joi.object({
         email: Joi.string().email().required(),
         password: Joi.string().min(6).required(),
+        role: Joi.string().valid('admin', 'donor', 'fundraiser').optional(),
     });
     return schema.validate(data);
 };

@@ -1,20 +1,43 @@
-import { mockDonations, formatTimestamp } from '../../data/mockData';
+import { useState, useEffect } from 'react';
+import api from '../../api/axios';
+import { formatTimestamp } from '../../data/mockData';
 
 type PayoutStatus = 'pending' | 'paid' | 'failed';
 
-const mockPayoutStatus: Record<string, PayoutStatus> = {
-  '1': 'paid',
-  '2': 'paid',
-  '3': 'pending',
-  '4': 'paid',
-  '5': 'pending',
-  '6': 'paid',
-};
+interface PaymentRecord {
+  id: string;
+  transactionId: string;
+  campaign: string;
+  donorName: string;
+  donorAvatar?: string;
+  amount: number;
+  timestamp: string;
+  status: 'pending' | 'completed' | 'failed';
+  payoutStatus: PayoutStatus;
+}
 
 export function ManagePaymentsPage() {
-  const payments = [...mockDonations].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadPayments = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await api.get('/donations/admin/all');
+        setPayments(response.data?.donations || []);
+      } catch (err: any) {
+        console.error('Failed to load payments:', err);
+        setError(err?.response?.data?.message || err?.message || 'Unable to load payments');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadPayments();
+  }, []);
 
   return (
     <div className="py-6 sm:py-10 px-4 sm:px-6 md:px-8 max-w-6xl mx-auto">
@@ -37,9 +60,26 @@ export function ManagePaymentsPage() {
               </tr>
             </thead>
             <tbody>
-              {payments.map((d) => {
-                const payoutStatus = mockPayoutStatus[d.id] ?? 'pending';
-                return (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
+                    Loading payments...
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-rose-600">
+                    {error}
+                  </td>
+                </tr>
+              ) : payments.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-slate-500">
+                    No payment records found.
+                  </td>
+                </tr>
+              ) : (
+                payments.map((d) => (
                   <tr key={d.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                     <td className="px-4 py-4 font-mono text-sm text-slate-700">{d.transactionId}</td>
                     <td className="px-4 py-4 text-slate-800">{d.campaign}</td>
@@ -67,19 +107,19 @@ export function ManagePaymentsPage() {
                     <td className="px-4 py-4">
                       <span
                         className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                          payoutStatus === 'paid'
+                          d.payoutStatus === 'paid'
                             ? 'bg-emerald-100 text-emerald-700'
-                            : payoutStatus === 'pending'
+                            : d.payoutStatus === 'pending'
                               ? 'bg-slate-100 text-slate-600'
                               : 'bg-rose-100 text-rose-700'
                         }`}
                       >
-                        {payoutStatus}
+                        {d.payoutStatus}
                       </span>
                     </td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
-                        {payoutStatus === 'pending' && (
+                        {d.payoutStatus === 'pending' && (
                           <button className="text-emerald-600 hover:text-emerald-700 text-sm font-medium">
                             Mark paid
                           </button>
@@ -88,8 +128,8 @@ export function ManagePaymentsPage() {
                       </div>
                     </td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
