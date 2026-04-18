@@ -37,6 +37,14 @@ export function LandingPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [campaignsError, setCampaignsError] = useState<string | null>(null);
+  const [platformAnalytics, setPlatformAnalytics] = useState({
+    totalCampaigns: 0,
+    totalRaised: 0,
+    totalDonors: 0,
+    transparency: 0,
+  });
+  const [platformLoading, setPlatformLoading] = useState(true);
+  const [platformError, setPlatformError] = useState<string | null>(null);
   const { categories: categoryStyles } = useCategories();
 
   const getCategoryStyles = (categoryName: string) => {
@@ -79,8 +87,26 @@ export function LandingPage() {
       }
     };
 
+    const fetchPlatformAnalytics = async () => {
+      try {
+        setPlatformLoading(true);
+        setPlatformError(null);
+        const response = await api.get('/analytics/public');
+        if (response.data?.success) {
+          setPlatformAnalytics(response.data.overview);
+        }
+      } catch (err: any) {
+        setPlatformError('Unable to load site metrics.');
+      } finally {
+        setPlatformLoading(false);
+      }
+    };
+
     fetchCampaigns();
+    fetchPlatformAnalytics();
   }, [categoryStyles]);
+
+  const formatNumber = (value: number) => value.toLocaleString();
 
   return (
     <>
@@ -152,19 +178,27 @@ export function LandingPage() {
       <div className="relative z-20 -mt-12 sm:-mt-16 px-4 sm:px-6 max-w-7xl mx-auto">
         <div className="bg-white rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 p-6 sm:p-8 grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-8 divide-y md:divide-y-0 md:divide-x divide-slate-100">
           <div className="text-center space-y-1">
-            <p className="text-3xl font-bold text-slate-800">2.5M+</p>
+            <p className="text-3xl font-bold text-slate-800">
+              {platformLoading ? '...' : `${formatNumber(platformAnalytics.totalDonors)}+`}
+            </p>
             <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Donors</p>
           </div>
           <div className="text-center space-y-1 pt-4 md:pt-0">
-            <p className="text-3xl font-bold text-emerald-600">$140M+</p>
+            <p className="text-3xl font-bold text-emerald-600">
+              {platformLoading ? '...' : `$${formatNumber(platformAnalytics.totalRaised)}+`}
+            </p>
             <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Funds Raised</p>
           </div>
           <div className="text-center space-y-1 pt-4 md:pt-0">
-            <p className="text-3xl font-bold text-slate-800">150k+</p>
+            <p className="text-3xl font-bold text-slate-800">
+              {platformLoading ? '...' : `${formatNumber(platformAnalytics.totalCampaigns)}+`}
+            </p>
             <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Campaigns</p>
           </div>
           <div className="text-center space-y-1 pt-4 md:pt-0">
-            <p className="text-3xl font-bold text-slate-800">100%</p>
+            <p className="text-3xl font-bold text-slate-800">
+              {platformLoading ? '...' : `${platformAnalytics.transparency}%`}
+            </p>
             <p className="text-sm text-slate-500 font-medium uppercase tracking-wider">Transparency</p>
           </div>
         </div>

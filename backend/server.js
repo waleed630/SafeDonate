@@ -48,6 +48,7 @@ const io = new Server(server, {
 // Initialize Socket.io (Clean & Professional)
 initializeSocket(io);
 // ====================== CORS ======================
+const frontendUrl = process.env.FRONTEND_URL;
 const allowedOrigins = [
     "http://localhost:8080",
     "http://127.0.0.1:8080",
@@ -55,7 +56,8 @@ const allowedOrigins = [
     // Vite / modern frontend dev server
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-];
+    frontendUrl,
+].filter(Boolean);
 
 app.use(
     cors({

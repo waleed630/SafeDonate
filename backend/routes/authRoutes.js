@@ -9,6 +9,7 @@ import passport from "passport";
 import User from "../models/User.js";
 import crypto from "crypto";
 import generateToken from "../utils/generateToken.js";   // ← Updated import path
+import { getFrontendUrl } from "../utils/getFrontendUrl.js";
 import nodemailer from "nodemailer";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -31,9 +32,12 @@ router.get("/google", (req, res, next) => {
     req.session = req.session || {};
     req.session.oauthRole = role;
     
+    const frontendUrl = getFrontendUrl(req);
+
     passport.authenticate("google", { 
         scope: ["profile", "email"],
-        state: role // Pass role as state parameter
+        state: role, // Pass role as state parameter
+        failureRedirect: `${frontendUrl}/register`
     })(req, res, next);
 });
 
@@ -67,11 +71,13 @@ router.get(
             const dashboardUrl = dashboardMap[role] || "/donor/dashboard";
             
             // Redirect to frontend with tokens (encoded in URL for SPA)
-            const redirectUrl = `${process.env.FRONTEND_URL}${dashboardUrl}?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
+            const frontendUrl = getFrontendUrl(req);
+            const redirectUrl = `${frontendUrl}${dashboardUrl}?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
             res.redirect(redirectUrl);
         } catch (error) {
             logger.error("Error in Google OAuth callback: %s", error.message);
-            res.redirect(process.env.FRONTEND_URL + "/register?error=oauth_failed");
+            const frontendUrl = getFrontendUrl(req);
+            res.redirect(`${frontendUrl}/register?error=oauth_failed`);
         }
     }
 );
@@ -155,8 +161,7 @@ router.post("/forgot-password", async (req, res) => {
         user.passwordResetExpires = Date.now() + 15 * 60 * 1000; // 15 minutes
         await user.save();
 
-        // Use FRONTEND_URL from environment, fallback to localhost:5173
-        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+        const frontendUrl = getFrontendUrl(req);
         const resetURL = `${frontendUrl}/reset-password/${resetToken}`;
 
         await transporter.sendMail({

@@ -2,6 +2,7 @@
 import stripe from '../config/stripe.js';
 import Donation from '../models/Donation.js';
 import Campaign from '../models/Campaign.js';
+import { getFrontendUrl } from '../utils/getFrontendUrl.js';
 import logger from '../utils/logger.js';
 
 export const createDonationSession = async (req, res) => {
@@ -23,6 +24,7 @@ export const createDonationSession = async (req, res) => {
         const campaign = await Campaign.findById(campaignId);
         if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
 
+        const frontendUrl = getFrontendUrl(req);
         const session = await stripe.checkout.sessions.create({
             payment_method_types: ['card'],
             line_items: [{
@@ -36,8 +38,8 @@ export const createDonationSession = async (req, res) => {
                 quantity: 1,
             }],
             mode: 'payment',
-            success_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/donation/success?session_id={CHECKOUT_SESSION_ID}`,
-            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/donation/cancel`,
+            success_url: `${frontendUrl}/donation/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancel_url: `${frontendUrl}/donation/cancel`,
             client_reference_id: campaignId,
             metadata: {
                 donorId: req.user._id.toString(),

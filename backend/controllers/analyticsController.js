@@ -89,6 +89,32 @@ export const getPlatformAnalytics = async (req, res) => {
   }
 };
 
+export const getPublicAnalytics = async (req, res) => {
+  try {
+    const totalCampaigns = await Campaign.countDocuments();
+    const totalRaisedResult = await Campaign.aggregate([
+      { $group: { _id: null, total: { $sum: "$raisedAmount" } } }
+    ]);
+    const totalRaised = totalRaisedResult[0]?.total || 0;
+    const totalDonors = await User.countDocuments({ role: 'donor' });
+    const verifiedCampaigns = await Campaign.countDocuments({ verified: true });
+    const transparency = totalCampaigns ? Math.round((verifiedCampaigns / totalCampaigns) * 100) : 0;
+
+    res.json({
+      success: true,
+      overview: {
+        totalCampaigns,
+        totalRaised,
+        totalDonors,
+        transparency,
+      }
+    });
+  } catch (err) {
+    logger.error(err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 export const getTransactionVolume = async (req, res) => {
   const volume = await Donation.aggregate([
     { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } }, volume: { $sum: "$amount" } } },
