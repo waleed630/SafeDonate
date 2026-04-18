@@ -8,6 +8,7 @@ import helmet from "helmet";
 import mongoose from "mongoose";
 import passport from "passport";
 import cookieParser from "cookie-parser";
+import session from "express-session";
 import { Server } from "socket.io";               
 import http from "http";
 
@@ -85,8 +86,21 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morganMiddleware);
 
+// ====================== SESSION (REQUIRED FOR OAUTH) ======================
+app.use(session({
+  secret: process.env.JWT_SECRET || 'your-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production', // Use secure cookies in production
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
+
 // ====================== PASSPORT ======================
 app.use(passport.initialize());
+app.use(passport.session());
 
 // ====================== ROUTES (Phase 1 - Only Auth) ======================
 app.use("/api/auth", authRoutes);

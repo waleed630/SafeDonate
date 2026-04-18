@@ -13,7 +13,10 @@ import { getFrontendUrl } from "../utils/getFrontendUrl.js";
 import nodemailer from "nodemailer";
 import path from "path";
 import { fileURLToPath } from "url";
-import logger from "../utils/logger.js";   // ← Added for consistency
+import logger from "../utils/logger.js";   
+import dotenv from "dotenv";
+
+dotenv.config();
 
 // Fix for ESM __dirname
 const __filename = fileURLToPath(import.meta.url);
@@ -27,57 +30,66 @@ router.post("/refresh-token", refreshTokenUser);
 
 // ====================== GOOGLE OAUTH ======================
 router.get("/google", (req, res, next) => {
-    // Custom callback to preserve role in session/state
+    // Preserve role in session for callback
     const role = req.query.role || "donor"; // Default to donor if not specified
-    req.session = req.session || {};
-    req.session.oauthRole = role;
     
-    const frontendUrl = getFrontendUrl(req);
-
+    console.log("🔐 Google OAuth Initiated:");
+    console.log("  Role from query:", req.query.role);
+    console.log("  Final role:", role);
+    
+    // Ensure session exists
+    if (!req.session) {
+        console.warn("⚠️  Session not initialized!");
+        req.session = {};
+    }
+    
+    req.session.oauthRole = role;
+    console.log("  ✅ Session oauthRole set to:", req.session.oauthRole);
+    
+    // Authenticate with Google and preserve selected role via state
     passport.authenticate("google", { 
         scope: ["profile", "email"],
-        state: role, // Pass role as state parameter
-        failureRedirect: `${frontendUrl}/register`
+        state: role,
     })(req, res, next);
 });
 
 router.get(
     "/google/callback",
     passport.authenticate("google", {
-        failureRedirect: process.env.FRONTEND_URL + "/register",
-        session: false,
+        failureRedirect: process.env.FRONTEND_URL + "/login?error=oauth_failed",
+        session: true,
     }),
     async (req, res) => {
         try {
-            // Get role from state or default to donor
-            const role = req.query.state || req.user.role || "donor";
+            // Get role from state, session, or default to donor
+            const role = req.query.state || req.session?.oauthRole || req.user.role || "donor";
             
-            // Update user role if it differs
+            console.log("🔍 OAuth Callback Debug:");
+            console.log("  req.query.state:", req.query.state);
+            console.log("  req.session?.oauthRole:", req.session?.oauthRole);
+            console.log("  req.user.role:", req.user.role);
+            console.log("  Final role:", role);
+            
+            // Update user role if it differs from selected role
             if (req.user.role !== role) {
                 req.user.role = role;
                 await req.user.save();
+                console.log("  ✅ User role updated to:", role);
             }
 
             // Generate tokens
             const { accessToken, refreshToken } = await generateToken(req.user, res);
             
-            // Determine dashboard based on role
-            const dashboardMap = {
-                admin: "/admin/dashboard",
-                fundraiser: "/fundraiser/dashboard",
-                donor: "/donor/dashboard"
-            };
-            
-            const dashboardUrl = dashboardMap[role] || "/donor/dashboard";
-            
-            // Redirect to frontend with tokens (encoded in URL for SPA)
+            // Redirect to login page with tokens
             const frontendUrl = getFrontendUrl(req);
-            const redirectUrl = `${frontendUrl}${dashboardUrl}?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
+            const redirectUrl = `${frontendUrl}/login?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
+            console.log("  📍 Redirecting to:", redirectUrl);
             res.redirect(redirectUrl);
         } catch (error) {
             logger.error("Error in Google OAuth callback: %s", error.message);
+            console.error("❌ OAuth Error:", error);
             const frontendUrl = getFrontendUrl(req);
-            res.redirect(`${frontendUrl}/register?error=oauth_failed`);
+            res.redirect(`${frontendUrl}/login?error=oauth_failed`);
         }
     }
 );

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
@@ -24,11 +24,50 @@ export function LoginRegister() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeUser, setWelcomeUser] = useState('');
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
-  const { login, register } = useAuth() as any;
+  const { login, register, setUser } = useAuth() as any;
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const refresh = params.get('refresh');
+    const userRole = params.get('role');
+
+    if (token && refresh) {
+      try {
+        const tokenParts = token.split('.');
+        if (tokenParts.length === 3) {
+          const decoded = JSON.parse(atob(tokenParts[1]));
+          const user = {
+            id: decoded.id || decoded.userId,
+            email: decoded.email,
+            name: decoded.username || decoded.name || '',
+            role: userRole || decoded.role || 'donor',
+          };
+
+          localStorage.setItem('safedonate_token', token);
+          localStorage.setItem('safedonate_refresh_token', refresh);
+          localStorage.setItem('safedonate_user', JSON.stringify(user));
+          setUser(user);
+
+          toast({
+            title: '✨ Welcome!',
+            description: `Signed in successfully as a ${user.role}.`,
+            variant: 'success',
+          });
+
+          const dest = user.role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
+          window.history.replaceState({}, document.title, window.location.pathname);
+          navigate(dest, { replace: true });
+        }
+      } catch (error) {
+        console.error('Failed to process OAuth callback:', error);
+      }
+    }
+  }, [navigate, setUser, toast]);
 
   const handleGoogleLogin = () => {
     // Redirect to backend Google OAuth endpoint with selected role
