@@ -2,13 +2,14 @@
 import express from 'express';
 const router = express.Router();
 
-import { createDonationSession, getDonationHistory, getRecentDonations, getAllDonations, verifyDonation } from '../controllers/donationController.js';
+import { createDonationSession, getDonationHistory, getRecentDonations,getDonationsByCampaign,  getAllDonations, verifyDonation } from '../controllers/donationController.js';
 import { stripeWebhook } from '../controllers/webhookController.js';
 import protect from '../middleware/authMiddleware.js';
 import restrictTo from '../middleware/role.js';
 
 // Public live donations feed
 router.get('/live', getRecentDonations);
+router.get('/campaign/:campaignId', getDonationsByCampaign);
 router.post('/donate', createDonationSession);
 router.get('/verify', verifyDonation);
 

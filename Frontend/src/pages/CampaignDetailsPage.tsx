@@ -6,7 +6,7 @@ import { Modal } from '../components/ui/Modal';
 import { LiveBadge } from '../components/live/LiveBadge';
 import { OnlineViewers } from '../components/live/OnlineViewers';
 import { LiveDonationTicker } from '../components/live/LiveDonationTicker';
-import { mockCampaignUpdates, getDonationsByCampaign, formatTimestamp } from '../data/mockData';
+import { getDonationsByCampaign, formatTimestamp } from '../data/mockData';
 import { useRealtime } from '../contexts/RealtimeContext';
 import { CampaignComments } from '../components/campaign/CampaignComments';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +34,8 @@ export function CampaignDetailsPage() {
   const [campaign, setCampaign] = useState<CampaignData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [donations, setDonations] = useState<any[]>([]);
+  const [donationsLoading, setDonationsLoading] = useState(false);
   
   // Fallback to mock data for now
   const realtime = useRealtime();
@@ -69,8 +71,30 @@ export function CampaignDetailsPage() {
       }
     };
 
+    const fetchDonations = async () => {
+      try {
+        setDonationsLoading(true);
+        console.log('Fetching donations for campaign:', id);
+        const response = await api.get(`/donations/campaign/${id}`);
+        console.log('Donations API response:', response.data);
+        if (response.data.success) {
+          setDonations(response.data.donations);
+        } else {
+          setDonations([]);
+        }
+      } catch (err: any) {
+        console.error('Failed to fetch donations:', err);
+        console.error('Error details:', err.response?.data || err.message);
+        // Don't fallback to mock data - show empty state
+        setDonations([]);
+      } finally {
+        setDonationsLoading(false);
+      }
+    };
+
     if (id) {
       fetchCampaign();
+      fetchDonations();
     }
   }, [id]);
 
@@ -167,37 +191,48 @@ export function CampaignDetailsPage() {
             <div className="mt-8 pt-6 border-t border-slate-100">
               <h3 className="font-semibold text-slate-900 mb-4">Recent Donations</h3>
               <div className="space-y-3 mb-6">
-                {getDonationsByCampaign(campaignFromData.id).slice(0, 5).map((d) => (
-                  <div key={d.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <img src={d.donorAvatar || 'https://i.pravatar.cc/150'} alt="" className="w-8 h-8 rounded-full" />
-                      <div>
-                        <p className="font-medium text-slate-800 text-sm">{d.donorName}</p>
-                        <p className="text-xs text-slate-500">{formatTimestamp(d.timestamp)}</p>
+                {donationsLoading ? (
+                  <p className="text-slate-500 text-center py-4">Loading donations...</p>
+                ) : donations.length > 0 ? (
+                  donations.slice(0, 5).map((d) => (
+                    <div key={d.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+                      <div className="flex items-center gap-3">
+                        <img src={d.donorAvatar || 'https://i.pravatar.cc/150'} alt="" className="w-8 h-8 rounded-full" />
+                        <div>
+                          <p className="font-medium text-slate-800 text-sm">{d.donorName}</p>
+                          <p className="text-xs text-slate-500">{formatTimestamp(d.timestamp)}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-emerald-600">${d.amount}</span>
+                        {d.verified && (
+                          <span className="text-emerald-500" title="Verified">
+                            <i className="fa-solid fa-shield-check text-xs" />
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-emerald-600">${d.amount}</span>
-                      {d.verified && (
-                        <span className="text-emerald-500" title="Verified">
-                          <i className="fa-solid fa-shield-check text-xs" />
-                        </span>
-                      )}
+                  ))
+                ) : (
+                  <div className="text-center py-8">
+                    <div className="text-slate-400 mb-2">
+                      <i className="fa-solid fa-heart text-3xl" />
                     </div>
+                    <p className="text-slate-500 text-sm">No donations yet</p>
+                    <p className="text-slate-400 text-xs">Be the first to support this campaign!</p>
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
             <div className="mt-8 pt-6 border-t border-slate-100">
               <h3 className="font-semibold text-slate-900 mb-4">Campaign Updates</h3>
-              <div className="space-y-4">
-                {mockCampaignUpdates.map((u) => (
-                  <div key={u.id} className="p-4 bg-slate-50 rounded-xl">
-                    <p className="text-slate-700">{u.text}</p>
-                    <p className="text-xs text-slate-500 mt-2">{u.date}</p>
-                  </div>
-                ))}
+              <div className="text-center py-8">
+                <div className="text-slate-400 mb-2">
+                  <i className="fa-solid fa-bullhorn text-2xl" />
+                </div>
+                <p className="text-slate-500 text-sm">No updates yet</p>
+                <p className="text-slate-400 text-xs">Updates will appear here when the fundraiser posts them</p>
               </div>
             </div>
 
@@ -236,7 +271,7 @@ export function CampaignDetailsPage() {
               <i className="fa-regular fa-heart mr-2" /> Save
             </button>
             </div>
-            <LiveDonationTicker variant="campaign" campaignId={campaign?._id || campaignFromData.id} maxItems={5} />
+            <LiveDonationTicker variant="campaign" campaignId={campaign?._id || campaignFromData.id.toString()} maxItems={5} />
           </div>
         </div>
       </div>

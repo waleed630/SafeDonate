@@ -146,8 +146,8 @@ export const getCampaigns = async (req, res) => {
       location,
       minGoal,
       maxGoal,
-      minProgress, // e.g. 50 for 50%+
-      sort, // "newest", "oldest", "popular", "progress"
+      minProgress, 
+      sort, 
       tags, // NEW: comma-separated tags to filter by (e.g., tags=Featured or tags=Featured,Urgent)
       recommendation = false, // NEW: ?recommendation=true for personalized mode
     } = req.query;

@@ -4,7 +4,7 @@ import { mockCampaignComments, formatTimestamp, type CampaignComment } from '../
 import { useAuth } from '../../contexts/AuthContext';
 
 interface CampaignCommentsProps {
-  campaignId: number;
+  campaignId: string | number;
   organizerName?: string;
   className?: string;
 }
@@ -12,7 +12,7 @@ interface CampaignCommentsProps {
 export function CampaignComments({ campaignId, className = '' }: CampaignCommentsProps) {
   const { user, isAuthenticated } = useAuth();
   const [comments, setComments] = useState<CampaignComment[]>(() =>
-    mockCampaignComments.filter((c) => c.campaignId === campaignId)
+    mockCampaignComments.filter((c) => c.campaignId === campaignId || c.campaignId.toString() === campaignId.toString())
   );
   const [newComment, setNewComment] = useState('');
   const [submitting, setSubmitting] = useState(false);

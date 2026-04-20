@@ -12,19 +12,19 @@ const campaignSchema = new mongoose.Schema({
     category: {
         type: String,
         required: true,
-        // Removed enum - will validate in controller by fetching from DB
+        
     },
     tags: {
         type: [String],
-        // Removed enum - tags come from Tag collection in database
+        
         default: [],
     },
-    description: {           // ← Story
+    description: {           
         type: String,
         required: [true, 'Story/description is required'],
         minlength: 100,
     },
-    images: {                // ← Cloudinary URLs
+    images: {                
         type: [String],
         default: [],
     },
@@ -61,7 +61,7 @@ const campaignSchema = new mongoose.Schema({
     },
     fraudScore: {
         type: Number,
-        default: 0,           // 0-100 (higher = more suspicious)
+        default: 0,          
     },
     verifiedBy: {
         type: mongoose.Schema.Types.ObjectId,
