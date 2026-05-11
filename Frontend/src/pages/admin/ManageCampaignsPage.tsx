@@ -11,6 +11,7 @@ interface Campaign {
   raisedAmount: number;
   status: 'pending' | 'approved' | 'rejected';
   verified: boolean;
+  adminPaused?: boolean;
   fundraiser: {
     _id: string;
     name: string;
@@ -34,6 +35,8 @@ export function ManageCampaignsPage() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const [pausingId, setPausingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Fetch campaigns
   useEffect(() => {
@@ -80,7 +83,7 @@ export function ManageCampaignsPage() {
       // Update local state
       setCampaigns(campaigns.map(c => 
         c._id === selectedCampaign._id 
-          ? { ...c, status: 'approved', verified: true }
+          ? { ...c, status: 'approved', verified: true, adminPaused: false }
           : c
       ));
       
@@ -137,6 +140,38 @@ export function ManageCampaignsPage() {
 
   const getStatusDisplay = (status: string) => {
     return status.charAt(0).toUpperCase() + status.slice(1);
+  };
+
+  const handleAdminDelete = async (campaign: Campaign) => {
+    const ok = window.confirm(
+      `Permanently delete “${campaign.title}”? This cannot be undone — including for approved or paused campaigns — and will remove the campaign from the platform.`,
+    );
+    if (!ok) return;
+    try {
+      setDeletingId(campaign._id);
+      setError('');
+      await api.delete(`/campaigns/${campaign._id}`);
+      setCampaigns((prev) => prev.filter((c) => c._id !== campaign._id));
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to delete campaign');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  const setPaused = async (campaign: Campaign, paused: boolean) => {
+    try {
+      setPausingId(campaign._id);
+      setError('');
+      await api.patch(`/campaigns/admin/${campaign._id}/pause`, { paused });
+      setCampaigns((prev) =>
+        prev.map((c) => (c._id === campaign._id ? { ...c, adminPaused: paused } : c)),
+      );
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update pause state');
+    } finally {
+      setPausingId(null);
+    }
   };
 
   const getProgress = (campaign: Campaign) => {
@@ -222,15 +257,22 @@ export function ManageCampaignsPage() {
                       <p className="text-xs text-slate-500 mt-1">${campaign.raisedAmount} / ${campaign.goalAmount}</p>
                     </td>
                     <td className="px-4 py-4">
-                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(campaign.status)}`}>
-                        {getStatusDisplay(campaign.status)}
-                      </span>
+                      <div className="flex flex-col gap-1.5">
+                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-medium w-fit ${getStatusColor(campaign.status)}`}>
+                          {getStatusDisplay(campaign.status)}
+                        </span>
+                        {campaign.verified && campaign.adminPaused && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-red-600 text-white w-fit">
+                            <i className="fa-solid fa-circle-pause" /> Paused — restricted
+                          </span>
+                        )}
+                      </div>
                       {campaign.status === 'rejected' && campaign.rejectionReason && (
                         <p className="text-xs text-rose-600 mt-1 max-w-xs">Reason: {campaign.rejectionReason}</p>
                       )}
                     </td>
                     <td className="px-4 py-4">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2 items-center">
                         {campaign.status === 'pending' && (
                           <>
                             <button
@@ -258,6 +300,35 @@ export function ManageCampaignsPage() {
                         {campaign.status === 'approved' && (
                           <span className="text-emerald-600 text-sm font-medium">Approved</span>
                         )}
+                        {campaign.verified && campaign.status !== 'rejected' && (
+                          campaign.adminPaused ? (
+                            <button
+                              type="button"
+                              disabled={pausingId === campaign._id}
+                              onClick={() => setPaused(campaign, false)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {pausingId === campaign._id ? '…' : 'Resume'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={pausingId === campaign._id}
+                              onClick={() => setPaused(campaign, true)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {pausingId === campaign._id ? '…' : 'Pause'}
+                            </button>
+                          )
+                        )}
+                        <button
+                          type="button"
+                          disabled={deletingId === campaign._id}
+                          onClick={() => handleAdminDelete(campaign)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                        >
+                          {deletingId === campaign._id ? 'Deleting…' : 'Delete'}
+                        </button>
                       </div>
                     </td>
                   </tr>

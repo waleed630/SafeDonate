@@ -1,8 +1,10 @@
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
+import { useAuth } from '../contexts/AuthContext';
 
 export function AdminDashboardPage() {
+  const { user } = useAuth();
   const [pendingCampaigns, setPendingCampaigns] = useState<any[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [activeCampaignsCount, setActiveCampaignsCount] = useState(0);
@@ -13,36 +15,37 @@ export function AdminDashboardPage() {
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [recentDonationsError, setRecentDonationsError] = useState<string | null>(null);
   const [isLoadingRecentDonations, setIsLoadingRecentDonations] = useState(true);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+
+  const fetchPendingCampaigns = useCallback(async () => {
+    setIsLoadingPending(true);
+    setPendingError(null);
+    try {
+      const response = await api.get('/verification/pending');
+      const campaigns = response.data?.campaigns || [];
+      setPendingCampaigns(campaigns.slice(0, 3));
+      setPendingCount(response.data?.count ?? campaigns.length);
+    } catch (error: any) {
+      console.error('Failed to load pending campaigns for admin dashboard:', error);
+      setPendingError(error?.response?.data?.message || error?.message || 'Unable to load pending campaigns');
+      setPendingCampaigns([]);
+      setPendingCount(0);
+    } finally {
+      setIsLoadingPending(false);
+    }
+  }, []);
 
   useEffect(() => {
-    const fetchPendingCampaigns = async () => {
-      setIsLoadingPending(true);
-      setPendingError(null);
-      try {
-        const response = await api.get('/verification/pending');
-        const campaigns = response.data?.campaigns || [];
-        setPendingCampaigns(campaigns.slice(0, 3));
-        setPendingCount(response.data?.count || campaigns.length);
-      } catch (error: any) {
-        console.error('Failed to load pending campaigns for admin dashboard:', error);
-        setPendingError(error?.response?.data?.message || error?.message || 'Unable to load pending campaigns');
-        setPendingCampaigns([]);
-        setPendingCount(0);
-      } finally {
-        setIsLoadingPending(false);
-      }
-    };
+    if (user?.role !== 'admin') return;
 
     const fetchDashboardStats = async () => {
       try {
         const response = await api.get('/campaigns/admin/stats');
-        setPendingCount(response.data?.pendingReviewCount ?? 0);
         setActiveCampaignsCount(response.data?.activeCampaignsCount ?? 0);
         setTotalUsersCount(response.data?.totalUsersCount ?? 0);
         setReportsCount(response.data?.reportsCount ?? 0);
       } catch (error: any) {
         console.error('Failed to load admin dashboard stats:', error);
-        setPendingCount((prev) => prev || 0);
         setActiveCampaignsCount(0);
         setTotalUsersCount(0);
         setReportsCount(0);
@@ -67,7 +70,38 @@ export function AdminDashboardPage() {
     fetchPendingCampaigns();
     fetchDashboardStats();
     fetchRecentDonations();
-  }, []);
+  }, [user?.id, user?.role, fetchPendingCampaigns]);
+
+  const handleApprove = async (campaignId: string) => {
+    if (!window.confirm('Approve this campaign? It will become visible to donors.')) return;
+    setPendingActionId(campaignId);
+    try {
+      await api.post(`/campaigns/admin/${campaignId}/approve`);
+      await fetchPendingCampaigns();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to approve campaign');
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
+  const handleReject = async (campaignId: string) => {
+    const reason = window.prompt('Reason for rejection (required):');
+    if (reason == null) return;
+    if (!reason.trim()) {
+      alert('A rejection reason is required.');
+      return;
+    }
+    setPendingActionId(campaignId);
+    try {
+      await api.post(`/campaigns/admin/${campaignId}/reject`, { reason: reason.trim() });
+      await fetchPendingCampaigns();
+    } catch (err: any) {
+      alert(err?.response?.data?.message || 'Failed to reject campaign');
+    } finally {
+      setPendingActionId(null);
+    }
+  };
 
   return (
     <div className="py-6 sm:py-10 px-4 sm:px-6 md:px-8 max-w-7xl mx-auto">
@@ -162,11 +196,21 @@ export function AdminDashboardPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <button type="button" className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-sm font-medium hover:bg-emerald-200 transition-colors">
-                      Approve
+                    <button
+                      type="button"
+                      disabled={!!pendingActionId}
+                      onClick={() => handleApprove(campaign._id)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-700 text-sm font-medium hover:bg-emerald-200 transition-colors disabled:opacity-50"
+                    >
+                      {pendingActionId === campaign._id ? '…' : 'Approve'}
                     </button>
-                    <button type="button" className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-700 text-sm font-medium hover:bg-rose-200 transition-colors">
-                      Reject
+                    <button
+                      type="button"
+                      disabled={!!pendingActionId}
+                      onClick={() => handleReject(campaign._id)}
+                      className="px-3 py-1.5 rounded-lg bg-rose-100 text-rose-700 text-sm font-medium hover:bg-rose-200 transition-colors disabled:opacity-50"
+                    >
+                      {pendingActionId === campaign._id ? '…' : 'Reject'}
                     </button>
                   </div>
                 </div>

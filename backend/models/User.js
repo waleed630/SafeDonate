@@ -52,6 +52,12 @@ const userSchema = new mongoose.Schema(
     passwordResetExpires: Date,
     // Stripe integration
     stripeCustomerId: { type: String, default: null, sparse: true },
+    /** Fundraiser: campaigns marked complete & removed (lifetime) */
+    completedCampaignsCount: { type: Number, default: 0, min: 0 },
+    /** Fundraiser: sum of donorCount only for completed campaigns that had reached their funding goal */
+    completedCampaignDonorsTotal: { type: Number, default: 0, min: 0 },
+    /** Fundraiser: sum of raisedAmount from campaigns marked complete (never decreases when campaigns are removed) */
+    fundraiserLifetimeRaised: { type: Number, default: 0, min: 0 },
   },
 
   { timestamps: true },

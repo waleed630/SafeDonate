@@ -26,8 +26,8 @@ const protect = async (req, res, next) => {
         // 3️⃣ Verify JWT
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // 4️⃣ Load user (exclude sensitive fields)
-        const user = await User.findById(decoded.userId).select("-password -passwordResetToken -passwordResetExpires");
+        // 4️⃣ Load user (exclude sensitive fields) — userId in JWT is always a string hex id
+        const user = await User.findById(String(decoded.userId || decoded.id)).select("-password -passwordResetToken -passwordResetExpires");
 
         if (!user) {
             return res.status(401).json({
@@ -55,6 +55,27 @@ const protect = async (req, res, next) => {
             message
         });
     }
+};
+
+/** Sets req.user when a valid cookie/header token exists; otherwise continues without 401 */
+export const optionalAuth = async (req, res, next) => {
+    req.user = undefined;
+    try {
+        let token = null;
+        if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+            token = req.headers.authorization.split(" ")[1];
+        } else if (req.cookies?.accessToken) {
+            token = req.cookies.accessToken;
+        }
+        if (!token) return next();
+
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const user = await User.findById(String(decoded.userId || decoded.id)).select("-password -passwordResetToken -passwordResetExpires");
+        if (user) req.user = user;
+    } catch {
+        /* invalid/expired token — treat as anonymous */
+    }
+    next();
 };
 
 export default protect;

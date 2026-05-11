@@ -3,6 +3,7 @@ import stripe from '../config/stripe.js';
 import Donation from '../models/Donation.js';
 import Campaign from '../models/Campaign.js';
 import logger from '../utils/logger.js';
+import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
 
 export const stripeWebhook = async (req, res) => {
     // Check if Stripe is properly initialized
@@ -49,6 +50,7 @@ export const stripeWebhook = async (req, res) => {
                 campaign.raisedAmount += donation.amount;
                 campaign.donorCount += 1;
                 await campaign.save();
+                await notifyCampaignGoalReachedIfNeeded(campaign._id);
             }
 
             logger.info(`✅ Donation completed & campaign updated | 

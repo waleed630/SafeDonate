@@ -3,7 +3,20 @@ import Campaign from "../models/Campaign.js";
 import Category from "../models/Category.js";
 import Tag from "../models/Tag.js";
 import User from "../models/User.js";
+import Donation from "../models/Donation.js";
+import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
+import { createNotification } from "../services/notificationService.js";
+
+const isCampaignVisibleToRequester = (campaign, user) => {
+  if (!campaign?.adminPaused) return true;
+  const requesterId = user?._id?.toString();
+  const fundraiserId =
+    campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
+  const isOwner = !!requesterId && requesterId === fundraiserId;
+  const isAdmin = user?.role === "admin";
+  return isOwner || isAdmin;
+};
 
 export const createCampaign = async (req, res) => {
   try {
@@ -152,7 +165,7 @@ export const getCampaigns = async (req, res) => {
       recommendation = false, // NEW: ?recommendation=true for personalized mode
     } = req.query;
 
-    const query = { verified: true }; // Only show verified campaigns
+    const query = { verified: true, adminPaused: { $ne: true } }; // Verified & not admin-restricted
 
     // 1. Keyword Search (title + description + location + category) – ENHANCED
     if (search) {
@@ -187,7 +200,7 @@ export const getCampaigns = async (req, res) => {
 
     // Build base query – PAST FEATURE
     let campaignsQuery = Campaign.find(query)
-      .populate("fundraiser", "username email")
+      .populate("fundraiser", "username email profilePicture")
       .select("-__v");
 
     // 5. Sort Options – PAST FEATURE
@@ -256,8 +269,9 @@ export const getUserCampaigns = async (req, res) => {
       return res.status(401).json({ success: false, message: "Not authenticated" });
     }
 
-    const campaigns = await Campaign.find({ fundraiser: req.user._id })
-      .populate("fundraiser", "username email")
+    const fundraiserId = req.user._id;
+    const campaigns = await Campaign.find({ fundraiser: fundraiserId })
+      .populate("fundraiser", "username email profilePicture")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, campaigns });
@@ -271,10 +285,26 @@ export const getCampaign = async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id).populate(
       "fundraiser",
-      "username email",
+      "username email profilePicture",
     );
     if (!campaign)
       return res.status(404).json({ success: false, message: "Campaign not found" });
+
+    if (campaign.adminPaused) {
+      const uid = req.user?._id?.toString();
+      const fundraiserId = campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
+      const isOwner = uid && fundraiserId && uid === fundraiserId;
+      const isAdmin = req.user?.role === "admin";
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          restricted: true,
+          message:
+            "This campaign has been temporarily restricted by the platform and is not visible to the public.",
+        });
+      }
+    }
+
     res.json({ success: true, campaign });
   } catch (err) {
     console.error('Error getting campaign:', err);
@@ -283,6 +313,222 @@ export const getCampaign = async (req, res) => {
       message: "Server error", 
       error: err.message 
     });
+  }
+};
+
+export const getTopCampaignDonations = async (req, res) => {
+  try {
+    const campaign = await Campaign.findById(req.params.id).populate(
+      "fundraiser",
+      "username email",
+    );
+    if (!campaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Campaign not found" });
+    }
+
+    if (!isCampaignVisibleToRequester(campaign, req.user)) {
+      return res.status(403).json({
+        success: false,
+        restricted: true,
+        message:
+          "This campaign has been temporarily restricted by the platform and is not visible to the public.",
+      });
+    }
+
+    const donations = await Donation.find({
+      campaign: campaign._id,
+      status: "completed",
+    })
+      .populate("donor", "username name email profilePicture")
+      .sort({ amount: -1, timestamp: -1 })
+      .limit(5);
+
+    const formatted = donations.map((d) => {
+      const donorName =
+        d.donor?.name || d.donor?.username || d.donor?.email || "Anonymous";
+      return {
+        _id: d._id,
+        id: d._id.toString(),
+        amount: d.amount,
+        verified: d.status === "completed",
+        donorName,
+        donorAvatar:
+          d.donor?.profilePicture ||
+          `https://i.pravatar.cc/150?u=${encodeURIComponent(d.donor?._id?.toString() || donorName)}`,
+        timestamp: d.timestamp || d.createdAt,
+      };
+    });
+
+    res.json({ success: true, donations: formatted });
+  } catch (error) {
+    logger.error("Error getting top campaign donations:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const getRecentCampaignDonations = async (req, res) => {
+  try {
+    const campaign = await Campaign.findById(req.params.id).populate(
+      "fundraiser",
+      "username email",
+    );
+    if (!campaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Campaign not found" });
+    }
+
+    if (!isCampaignVisibleToRequester(campaign, req.user)) {
+      return res.status(403).json({
+        success: false,
+        restricted: true,
+        message:
+          "This campaign has been temporarily restricted by the platform and is not visible to the public.",
+      });
+    }
+
+    const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
+    const donations = await Donation.find({
+      campaign: campaign._id,
+      status: "completed",
+    })
+      .populate("donor", "username name email profilePicture")
+      .sort({ timestamp: -1, createdAt: -1 })
+      .limit(limit);
+
+    const formatted = donations.map((d) => {
+      const donorName =
+        d.donor?.name || d.donor?.username || d.donor?.email || "Anonymous";
+      return {
+        _id: d._id,
+        id: d._id.toString(),
+        amount: d.amount,
+        verified: d.status === "completed",
+        donorName,
+        donorAvatar:
+          d.donor?.profilePicture ||
+          `https://i.pravatar.cc/150?u=${encodeURIComponent(d.donor?._id?.toString() || donorName)}`,
+        timestamp: d.timestamp || d.createdAt,
+      };
+    });
+
+    res.json({ success: true, donations: formatted });
+  } catch (error) {
+    logger.error("Error getting recent campaign donations:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const getCampaignComments = async (req, res) => {
+  try {
+    const campaign = await Campaign.findById(req.params.id)
+      .populate("fundraiser", "username email")
+      .populate("comments.user", "username name email profilePicture");
+    if (!campaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Campaign not found" });
+    }
+
+    if (!isCampaignVisibleToRequester(campaign, req.user)) {
+      return res.status(403).json({
+        success: false,
+        restricted: true,
+        message:
+          "This campaign has been temporarily restricted by the platform and is not visible to the public.",
+      });
+    }
+
+    const fundraiserId =
+      campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
+    const comments = (campaign.comments || [])
+      .map((c) => {
+        const commenterId = c.user?._id?.toString?.() ?? String(c.user);
+        const userName =
+          c.user?.name || c.user?.username || c.user?.email || "Anonymous";
+        return {
+          _id: c._id,
+          id: c._id.toString(),
+          text: c.text,
+          createdAt: c.createdAt,
+          userId: commenterId,
+          userName,
+          userAvatar:
+            c.user?.profilePicture ||
+            `https://i.pravatar.cc/150?u=${encodeURIComponent(commenterId || userName)}`,
+          isOwner: commenterId === fundraiserId,
+        };
+      })
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, comments });
+  } catch (error) {
+    logger.error("Error getting campaign comments:", error);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+export const addCampaignComment = async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim();
+    if (!text) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Comment text is required" });
+    }
+
+    const campaign = await Campaign.findById(req.params.id).populate(
+      "fundraiser",
+      "username email",
+    );
+    if (!campaign) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Campaign not found" });
+    }
+
+    if (!isCampaignVisibleToRequester(campaign, req.user)) {
+      return res.status(403).json({
+        success: false,
+        restricted: true,
+        message:
+          "This campaign has been temporarily restricted by the platform and is not visible to the public.",
+      });
+    }
+
+    campaign.comments.push({
+      user: req.user._id,
+      text,
+      createdAt: new Date(),
+    });
+    await campaign.save();
+
+    const userName = req.user?.name || req.user?.username || req.user?.email || "Anonymous";
+    const fundraiserId =
+      campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
+    const requesterId = req.user?._id?.toString?.() ?? "";
+    const latestComment = campaign.comments[campaign.comments.length - 1];
+
+    res.status(201).json({
+      success: true,
+      comment: {
+        _id: latestComment._id,
+        id: latestComment._id.toString(),
+        text: latestComment.text,
+        createdAt: latestComment.createdAt,
+        userId: requesterId,
+        userName,
+        userAvatar:
+          req.user?.profilePicture ||
+          `https://i.pravatar.cc/150?u=${encodeURIComponent(requesterId || userName)}`,
+        isOwner: requesterId === fundraiserId,
+      },
+    });
+  } catch (error) {
+    logger.error("Error adding campaign comment:", error);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -333,9 +579,87 @@ export const deleteCampaign = async (req, res) => {
   }
 };
 
+/**
+ * Fundraiser marks campaign complete. Campaign and its donations are removed;
+ * lifetime stats: always +1 completed campaign and preserved raised; supporter (completed) total
+ * only increases when the funding goal was reached at completion time.
+ */
+export const completeCampaign = async (req, res) => {
+  try {
+    if (req.user.role !== "fundraiser") {
+      return res.status(403).json({
+        success: false,
+        message: "Only fundraisers can mark a campaign complete.",
+      });
+    }
+
+    const campaign = await Campaign.findById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: "Campaign not found" });
+    }
+    if (campaign.fundraiser.toString() !== req.user._id.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only complete your own campaigns.",
+      });
+    }
+
+    const donorCountSnapshot = Math.max(0, campaign.donorCount || 0);
+    const raisedSnapshot = Math.max(0, Number(campaign.raisedAmount) || 0);
+    const goalAmount = Math.max(0, Number(campaign.goalAmount) || 0);
+    const goalReached = goalAmount > 0 && raisedSnapshot >= goalAmount;
+
+    const userInc = {
+      completedCampaignsCount: 1,
+      fundraiserLifetimeRaised: raisedSnapshot,
+    };
+    if (goalReached) {
+      userInc.completedCampaignDonorsTotal = donorCountSnapshot;
+    }
+
+    await User.findByIdAndUpdate(req.user._id, { $inc: userInc });
+
+    const titleSnapshot = campaign.title;
+
+    await Notification.deleteMany({ campaign: campaign._id });
+    await Donation.deleteMany({ campaign: campaign._id });
+    await Campaign.deleteOne({ _id: campaign._id });
+
+    await createNotification(
+      req.user._id,
+      "system",
+      "Campaign completed",
+      `"${titleSnapshot}" has been removed from the platform.`,
+      null,
+    );
+
+    logger.info(
+      `[COMPLETE] Fundraiser ${req.user._id} completed & deleted campaign ${req.params.id} (goalReached=${goalReached}, donors recorded toward supporter total: ${goalReached ? donorCountSnapshot : 0}, raised preserved: ${raisedSnapshot})`,
+    );
+
+    res.json({
+      success: true,
+      message: "Campaign marked complete and removed from the platform.",
+      summary: {
+        goalReached,
+        donorCountRecorded: goalReached ? donorCountSnapshot : 0,
+      },
+    });
+  } catch (err) {
+    logger.error("completeCampaign error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 export const addUpdate = async (req, res) => {
   try {
-    const { title, content } = req.body;
+    const title = String(req.body?.title || "Campaign update").trim();
+    const content = String(req.body?.content || "").trim();
+    if (!content) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Update content is required" });
+    }
     const campaign = await Campaign.findById(req.params.id);
     if (!campaign)
       return res.status(404).json({ success: false, message: "Not found" });
@@ -345,7 +669,12 @@ export const addUpdate = async (req, res) => {
     }
 
     // ← Your original functionality (unchanged)
-    campaign.updates.push({ title, content });
+    campaign.updates.push({
+      title: title || "Campaign update",
+      content,
+      postedBy: req.user._id,
+      postedAt: new Date(),
+    });
     await campaign.save();
 
     // === NEW: Feature 9 - Campaign Update Alerts ===
@@ -397,7 +726,7 @@ export const getAllCampaigns = async (req, res) => {
     }
 
     const campaigns = await Campaign.find(query)
-      .populate('fundraiser', 'username email name')
+      .populate('fundraiser', 'username email name profilePicture')
       .populate('verifiedBy', 'username name')
       .sort({ createdAt: -1 });
 
@@ -420,8 +749,14 @@ export const getAdminDashboardStats = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Only admins can access this' });
     }
 
-    const pendingReviewCount = await Campaign.countDocuments({ verified: false });
-    const activeCampaignsCount = await Campaign.countDocuments({ verified: true });
+    const pendingReviewCount = await Campaign.countDocuments({
+      verified: false,
+      status: 'pending',
+    });
+    const activeCampaignsCount = await Campaign.countDocuments({
+      verified: true,
+      adminPaused: { $ne: true },
+    });
     const totalUsersCount = await User.countDocuments();
     const reportsCount = await Campaign.countDocuments({ status: 'rejected' });
 
@@ -452,6 +787,7 @@ export const approveCampaign = async (req, res) => {
       {
         status: 'approved',
         verified: true,
+        adminPaused: false,
         verifiedBy: req.user._id,
         verifiedAt: new Date(),
         rejectionReason: null,
@@ -495,6 +831,7 @@ export const rejectCampaign = async (req, res) => {
       {
         status: 'rejected',
         verified: false,
+        adminPaused: false,
         verifiedBy: req.user._id,
         verifiedAt: new Date(),
         rejectionReason: reason,
@@ -515,6 +852,48 @@ export const rejectCampaign = async (req, res) => {
     });
   } catch (error) {
     logger.error('Error rejecting campaign:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Pause or resume a verified campaign (admin only). Paused campaigns are hidden from public listings and cannot receive donations.
+ */
+export const setCampaignPaused = async (req, res) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Only admins can pause campaigns' });
+    }
+
+    const { paused } = req.body;
+    if (typeof paused !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Body must include paused: true or false' });
+    }
+
+    const campaign = await Campaign.findById(req.params.id);
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+
+    if (!campaign.verified || campaign.status === 'rejected') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only verified campaigns that are not rejected can be paused or resumed.',
+      });
+    }
+
+    campaign.adminPaused = paused;
+    await campaign.save();
+
+    logger.info(`[ADMIN] Campaign ${campaign._id} adminPaused=${paused} by ${req.user.username}`);
+
+    res.json({
+      success: true,
+      message: paused ? 'Campaign paused (restricted).' : 'Campaign resumed.',
+      campaign,
+    });
+  } catch (error) {
+    logger.error('Error setting campaign paused:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };

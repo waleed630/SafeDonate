@@ -3,14 +3,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import { CampaignCard } from '../components/CampaignCard';
 import api from '../api/axios';
 import { useCategories } from '../contexts/CategoriesContext';
+import { organizerAvatarUrl } from '../utils/organizerAvatar';
 
+/** discoverId matches `discoverCategories` ids on CampaignsPage for ?category= filtering */
 const categories = [
-  { icon: 'fa-heart-pulse', label: 'Medical', bg: 'bg-emerald-50', text: 'text-emerald-600', hoverBg: 'group-hover:bg-emerald-600', hoverText: 'group-hover:text-emerald-700' },
-  { icon: 'fa-graduation-cap', label: 'Education', bg: 'bg-blue-50', text: 'text-blue-600', hoverBg: 'group-hover:bg-blue-600', hoverText: 'group-hover:text-blue-700' },
-  { icon: 'fa-paw', label: 'Animals', bg: 'bg-amber-50', text: 'text-amber-600', hoverBg: 'group-hover:bg-amber-600', hoverText: 'group-hover:text-amber-700' },
-  { icon: 'fa-house-chimney-crack', label: 'Disaster', bg: 'bg-rose-50', text: 'text-rose-600', hoverBg: 'group-hover:bg-rose-600', hoverText: 'group-hover:text-rose-700' },
-  { icon: 'fa-palette', label: 'Creative', bg: 'bg-purple-50', text: 'text-purple-600', hoverBg: 'group-hover:bg-purple-600', hoverText: 'group-hover:text-purple-700' },
-  { icon: 'fa-leaf', label: 'Environment', bg: 'bg-teal-50', text: 'text-teal-600', hoverBg: 'group-hover:bg-teal-600', hoverText: 'group-hover:text-teal-700' },
+  { discoverId: 'medical', icon: 'fa-heart-pulse', label: 'Medical', bg: 'bg-emerald-50', text: 'text-emerald-600', hoverBg: 'group-hover:bg-emerald-600', hoverText: 'group-hover:text-emerald-700' },
+  { discoverId: 'education', icon: 'fa-graduation-cap', label: 'Education', bg: 'bg-blue-50', text: 'text-blue-600', hoverBg: 'group-hover:bg-blue-600', hoverText: 'group-hover:text-blue-700' },
+  { discoverId: 'animals', icon: 'fa-paw', label: 'Animals', bg: 'bg-amber-50', text: 'text-amber-600', hoverBg: 'group-hover:bg-amber-600', hoverText: 'group-hover:text-amber-700' },
+  { discoverId: 'disaster', icon: 'fa-house-chimney-crack', label: 'Disaster', bg: 'bg-rose-50', text: 'text-rose-600', hoverBg: 'group-hover:bg-rose-600', hoverText: 'group-hover:text-rose-700' },
+  { discoverId: 'creative', icon: 'fa-palette', label: 'Creative', bg: 'bg-purple-50', text: 'text-purple-600', hoverBg: 'group-hover:bg-purple-600', hoverText: 'group-hover:text-purple-700' },
+  { discoverId: 'environment', icon: 'fa-leaf', label: 'Environment', bg: 'bg-teal-50', text: 'text-teal-600', hoverBg: 'group-hover:bg-teal-600', hoverText: 'group-hover:text-teal-700' },
 ];
 
 interface Campaign {
@@ -30,6 +32,7 @@ interface Campaign {
     _id: string;
     username: string;
     email: string;
+    profilePicture?: string | null;
   };
 }
 
@@ -217,16 +220,16 @@ export function LandingPage() {
 
         <div className="flex gap-6 overflow-x-auto pb-6 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {categories.map((cat) => (
-            <a
+            <Link
               key={cat.label}
-              href="#"
-              className={`group flex-shrink-0 w-40 flex flex-col items-center gap-3 p-6 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-300`}
+              to={`/campaigns?category=${encodeURIComponent(cat.discoverId)}`}
+              className="group flex-shrink-0 w-40 flex flex-col items-center gap-3 p-6 rounded-2xl bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-emerald-200 transition-all duration-300"
             >
               <div className={`w-14 h-14 rounded-full ${cat.bg} ${cat.text} flex items-center justify-center text-xl ${cat.hoverBg} group-hover:text-white transition-colors duration-300`}>
                 <i className={`fa-solid ${cat.icon}`} />
               </div>
               <span className={`font-semibold text-slate-700 ${cat.hoverText}`}>{cat.label}</span>
-            </a>
+            </Link>
           ))}
         </div>
       </section>
@@ -284,7 +287,7 @@ export function LandingPage() {
                       categoryIcon: categoryStyle.icon,
                       categoryBadge: categoryStyle.badge,
                       titleHover: categoryStyle.hover,
-                      avatar: `https://i.pravatar.cc/150?u=${campaign.fundraiser._id}`,
+                      avatar: organizerAvatarUrl(campaign.fundraiser),
                       author: campaign.fundraiser.username,
                       title: campaign.title,
                       description: campaign.description,

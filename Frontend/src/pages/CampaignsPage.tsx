@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   discoverCategories,
   discoverLocations,
@@ -10,6 +10,7 @@ import {
 import { LiveDonationMarquee } from '../components/live/LiveDonationMarquee';
 import { useTagsOptional } from '../contexts/TagsContext';
 import api from '../api/axios';
+import { organizerAvatarUrl } from '../utils/organizerAvatar';
 
 interface CampaignItem {
   id: string;
@@ -31,9 +32,114 @@ interface CampaignItem {
   tagIds?: string[];
 }
 
+/** Showcase hero when there is no clear “most donated” leader from live data */
+const STATIC_TRENDING_HERO: CampaignItem = {
+  id: '__static_trending__',
+  image: 'https://images.pexels.com/photos/3822906/pexels-photo-3822906.jpeg?auto=compress&cs=tinysrgb&w=1200',
+  category: 'Environment',
+  categoryId: 'environment',
+  title: 'Clean Water Initiative for Rural Communities',
+  description:
+    'Join over 5,000 donors helping to build sustainable water filtration systems in drought-affected regions. Every drop counts.',
+  location: 'Global',
+  raised: 84230,
+  goal: 100000,
+  percent: 84,
+  author: 'SafeDonate Community',
+  authorAvatar: 'https://ui-avatars.com/api/?name=SafeDonate&background=047857&color=fff&size=128',
+  daysLeft: 0,
+  donors: 5000,
+  createdAt: new Date().toISOString(),
+  urgent: false,
+  tagIds: [],
+};
+
+type TrendingPick = { kind: 'live'; campaign: CampaignItem } | { kind: 'static'; campaign: CampaignItem };
+
+/**
+ * Trending = campaign with highest total raised (donations). Fallback to static when:
+ * no campaigns, a single campaign still at $0, or 2+ campaigns all tied on the same raised amount (including all $0).
+ */
+function resolveTrendingHero(campaigns: CampaignItem[]): TrendingPick {
+  if (campaigns.length === 0) {
+    return { kind: 'static', campaign: STATIC_TRENDING_HERO };
+  }
+
+  if (campaigns.length === 1) {
+    const only = campaigns[0];
+    return only.raised > 0 ? { kind: 'live', campaign: only } : { kind: 'static', campaign: STATIC_TRENDING_HERO };
+  }
+
+  const firstRaised = campaigns[0].raised;
+  const allSameRaised = campaigns.every((c) => c.raised === firstRaised);
+  const allZero = firstRaised === 0 && allSameRaised;
+
+  if (allZero || allSameRaised) {
+    return { kind: 'static', campaign: STATIC_TRENDING_HERO };
+  }
+
+  const sortedByDonations = [...campaigns].sort((a, b) => {
+    if (b.raised !== a.raised) return b.raised - a.raised;
+    if (b.donors !== a.donors) return b.donors - a.donors;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  return { kind: 'live', campaign: sortedByDonations[0] };
+}
+
+function staticTrendingCompletedMessage() {
+  window.alert(
+    'This featured showcase campaign is already completed. Browse the live campaigns below to support a real fundraiser.',
+  );
+}
+
+function normalizeCampaignFromApi(c: any): CampaignItem {
+  return {
+    id: c._id,
+    image: c.images?.[0] || 'https://via.placeholder.com/400x300?text=Campaign',
+    category: c.category || 'General',
+    categoryId: String(c.category || 'general').toLowerCase(),
+    title: c.title || 'Untitled Campaign',
+    description: c.description || '',
+    location: c.location || 'Unknown',
+    raised: c.raisedAmount ?? 0,
+    goal: c.goalAmount ?? 0,
+    percent: c.progress ?? Math.round(((c.raisedAmount ?? 0) / Math.max(1, c.goalAmount ?? 1)) * 100),
+    author: c.fundraiser?.username || 'Organizer',
+    authorAvatar: organizerAvatarUrl(c.fundraiser),
+    daysLeft: c.daysLeft ?? 0,
+    donors: c.donorCount ?? 0,
+    createdAt: c.createdAt || new Date().toISOString(),
+    urgent: c.urgent || false,
+    tagIds: c.tags || [],
+  };
+}
+
+function categoryFromSearchParams(searchParams: URLSearchParams): string {
+  const raw = searchParams.get('category');
+  if (raw && discoverCategories.some((c) => c.id === raw)) return raw;
+  return 'all';
+}
+
 export function CampaignsPage() {
   const tagsContext = useTagsOptional();
-  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [selectedCategory, setSelectedCategory] = useState<string>(() => categoryFromSearchParams(searchParams));
+
+  const selectCategory = useCallback(
+    (id: string) => {
+      setSelectedCategory(id);
+      const next = new URLSearchParams(searchParams);
+      if (id === 'all') {
+        next.delete('category');
+      } else {
+        next.set('category', id);
+      }
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
   const [search, setSearch] = useState('');
   const [locationFilter, setLocationFilter] = useState<string>('all');
   const [targetFilter, setTargetFilter] = useState<string>('all');
@@ -45,7 +151,29 @@ export function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  /** Full verified list (no discover filters) — used only to pick global “most raised” trending hero */
+  const [trendingPool, setTrendingPool] = useState<CampaignItem[]>([]);
   const filtersRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadTrendingPool = async () => {
+      try {
+        const response = await api.get('/campaigns', {
+          params: { sort: 'progress' },
+        });
+        const results = response.data.campaigns || [];
+        const normalized = (Array.isArray(results) ? results : []).map(normalizeCampaignFromApi);
+        if (!cancelled) setTrendingPool(normalized);
+      } catch {
+        if (!cancelled) setTrendingPool([]);
+      }
+    };
+    void loadTrendingPool();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -54,6 +182,10 @@ export function CampaignsPage() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    setSelectedCategory(categoryFromSearchParams(searchParams));
+  }, [searchParams]);
 
   useEffect(() => {
     const fetchCampaigns = async () => {
@@ -90,25 +222,7 @@ export function CampaignsPage() {
         const response = await api.get('/campaigns', { params });
         const results = response.data.campaigns || [];
 
-        const normalized = results.map((c: any) => ({
-          id: c._id,
-          image: c.images?.[0] || 'https://via.placeholder.com/400x300?text=Campaign',
-          category: c.category || 'General',
-          categoryId: String(c.category || 'general').toLowerCase(),
-          title: c.title || 'Untitled Campaign',
-          description: c.description || '',
-          location: c.location || 'Unknown',
-          raised: c.raisedAmount ?? 0,
-          goal: c.goalAmount ?? 0,
-          percent: c.progress ?? Math.round(((c.raisedAmount ?? 0) / Math.max(1, c.goalAmount ?? 1)) * 100),
-          author: c.fundraiser?.username || 'Organizer',
-          authorAvatar: `https://i.pravatar.cc/150?u=${c.fundraiser?._id || c._id}`,
-          daysLeft: c.daysLeft ?? 0,
-          donors: c.donorCount ?? 0,
-          createdAt: c.createdAt || new Date().toISOString(),
-          urgent: c.urgent || false,
-          tagIds: c.tags || [],
-        }));
+        const normalized = (Array.isArray(results) ? results : []).map(normalizeCampaignFromApi);
 
         setCampaigns(normalized);
       } catch (err: any) {
@@ -149,6 +263,9 @@ export function CampaignsPage() {
         return 0;
     }
   });
+
+  const trending = useMemo(() => resolveTrendingHero(trendingPool), [trendingPool]);
+  const hero = trending.campaign;
 
   const activeFiltersCount =
     (locationFilter !== 'all' ? 1 : 0) +
@@ -342,39 +459,86 @@ export function CampaignsPage() {
           </div>
         ) : null}
 
-        {/* Featured Hero Section */}
-        <section className="relative rounded-xl sm:rounded-2xl overflow-hidden shadow-xl group cursor-pointer">
+        {/* Trending hero — live leader by total raised, or static showcase when there is no clear leader */}
+        <section
+          className={`relative rounded-xl sm:rounded-2xl overflow-hidden shadow-xl group ${
+            trending.kind === 'live' ? 'cursor-pointer' : ''
+          }`}
+          onClick={trending.kind === 'live' ? () => navigate(`/campaigns/${hero.id}`) : undefined}
+          onKeyDown={
+            trending.kind === 'live'
+              ? (e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate(`/campaigns/${hero.id}`);
+                  }
+                }
+              : undefined
+          }
+          role={trending.kind === 'live' ? 'link' : undefined}
+          tabIndex={trending.kind === 'live' ? 0 : undefined}
+        >
           <div className="absolute inset-0 bg-gradient-to-r from-emerald-900/90 via-emerald-900/60 to-transparent z-10" />
           <img
-            src="https://images.pexels.com/photos/3822906/pexels-photo-3822906.jpeg?auto=compress&cs=tinysrgb&w=1200"
-            alt="Featured Cause"
+            src={hero.image}
+            alt=""
             className="w-full h-[260px] sm:h-[320px] md:h-[400px] object-cover transform group-hover:scale-105 transition-transform duration-700"
           />
           <div className="absolute inset-0 z-20 flex flex-col justify-center px-4 sm:px-6 md:px-10 max-w-3xl py-6 sm:py-8">
             <span className="inline-flex items-center gap-2 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-emerald-500/20 backdrop-blur-sm border border-emerald-400/30 text-emerald-100 text-[10px] sm:text-xs font-bold uppercase tracking-wider w-fit mb-3 sm:mb-4">
-              <i className="fa-solid fa-bolt text-emerald-300" /> Trending Now
+              <i className="fa-solid fa-bolt text-emerald-300" />{' '}
+              {trending.kind === 'live' ? 'Trending — most raised' : 'Trending showcase'}
             </span>
             <h1 className="font-serif text-xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-2 sm:mb-4 leading-tight">
-              Clean Water Initiative for Rural Communities
+              {hero.title}
             </h1>
             <p className="text-emerald-50 text-xs sm:text-base md:text-lg mb-4 sm:mb-8 font-light leading-relaxed max-w-xl line-clamp-2 sm:line-clamp-none">
-              Join over 5,000 donors helping to build sustainable water filtration systems in drought-affected regions. Every drop counts.
+              {hero.description}
             </p>
-            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4">
-              <button type="button" className="w-full sm:w-auto px-4 sm:px-6 md:px-8 py-2.5 sm:py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white text-sm sm:text-base font-semibold rounded-lg shadow-lg shadow-emerald-900/20 transition-all transform hover:-translate-y-0.5">
+            <div
+              className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-4"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (trending.kind === 'static') {
+                    staticTrendingCompletedMessage();
+                    return;
+                  }
+                  navigate(`/campaigns/${hero.id}`);
+                }}
+                className="w-full sm:w-auto px-4 sm:px-6 md:px-8 py-2.5 sm:py-3.5 bg-emerald-500 hover:bg-emerald-400 text-white text-sm sm:text-base font-semibold rounded-lg shadow-lg shadow-emerald-900/20 transition-all transform hover:-translate-y-0.5"
+              >
                 Donate Now
               </button>
-              <button type="button" className="w-full sm:w-auto px-4 sm:px-6 md:px-8 py-2.5 sm:py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white text-sm sm:text-base font-medium rounded-lg border border-white/30 transition-all">
+              <button
+                type="button"
+                onClick={() => {
+                  if (trending.kind === 'static') {
+                    staticTrendingCompletedMessage();
+                    return;
+                  }
+                  navigate(`/campaigns/${hero.id}`);
+                }}
+                className="w-full sm:w-auto px-4 sm:px-6 md:px-8 py-2.5 sm:py-3.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white text-sm sm:text-base font-medium rounded-lg border border-white/30 transition-all"
+              >
                 Read Story
               </button>
             </div>
             <div className="mt-6 sm:mt-10 max-w-md">
               <div className="flex justify-between text-xs sm:text-sm text-emerald-100 mb-1.5 sm:mb-2 font-medium">
-                <span>$84,230 raised</span>
-                <span>84% of $100k</span>
+                <span>${hero.raised.toLocaleString()} raised</span>
+                <span>
+                  {hero.percent}% of ${hero.goal.toLocaleString()}
+                </span>
               </div>
               <div className="h-1.5 sm:h-2 bg-emerald-900/50 rounded-full overflow-hidden backdrop-blur-sm border border-white/10">
-                <div className="h-full bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" style={{ width: '84%' }} />
+                <div
+                  className="h-full bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]"
+                  style={{ width: `${Math.min(100, hero.percent)}%` }}
+                />
               </div>
             </div>
           </div>
@@ -384,16 +548,16 @@ export function CampaignsPage() {
         <section className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 className="font-serif text-xl font-bold text-slate-800">Browse by Category</h3>
-            <a href="#" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
+            <Link to="/campaigns" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 flex items-center gap-1">
               View All <i className="fa-solid fa-arrow-right text-xs" />
-            </a>
+            </Link>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {discoverCategories.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
-                onClick={() => setSelectedCategory(cat.id)}
+                onClick={() => selectCategory(cat.id)}
                 className={`flex-shrink-0 flex items-center gap-2 px-6 py-3 rounded-full shadow-sm transition-all font-medium ${
                   selectedCategory === cat.id
                     ? 'bg-emerald-900 text-white shadow-md hover:scale-105'
@@ -431,7 +595,9 @@ export function CampaignsPage() {
         {/* Campaign Grid */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-slate-500 text-sm">{sorted.length} campaign{sorted.length !== 1 ? 's' : ''} found</p>
+            <p className="text-slate-500 text-sm">
+              {sorted.length} campaign{sorted.length !== 1 ? 's' : ''} found
+            </p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
             {sorted.map((campaign) => (
@@ -504,7 +670,7 @@ export function CampaignsPage() {
                   setLocationFilter('all');
                   setTargetFilter('all');
                   setProgressFilter('all');
-                  setSelectedCategory('all');
+                  selectCategory('all');
                   setSearch('');
                 }}
                 className="mt-4 text-emerald-600 hover:text-emerald-700 font-medium"

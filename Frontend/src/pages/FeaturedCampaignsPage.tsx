@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { CampaignCard } from '../components/CampaignCard';
 import { LoginRequiredModal } from '../components/LoginRequiredModal';
 import api from '../api/axios';
+import { organizerAvatarUrl } from '../utils/organizerAvatar';
 import { useCategories } from '../contexts/CategoriesContext';
 
 interface Campaign {
@@ -132,7 +133,7 @@ export function FeaturedCampaignsPage() {
                     categoryIcon: categoryStyles.icon,
                     categoryBadge: categoryStyles.badge,
                     titleHover: categoryStyles.hover,
-                    avatar: 'https://i.pravatar.cc/150?u=' + campaign.fundraiser._id,
+                    avatar: organizerAvatarUrl(campaign.fundraiser),
                     author: campaign.fundraiser.username,
                     title: campaign.title,
                     description: campaign.description,

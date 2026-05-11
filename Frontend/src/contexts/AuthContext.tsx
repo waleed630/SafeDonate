@@ -8,7 +8,7 @@ interface AuthContextType {
   isSessionExpired: boolean;
   login: (email: string, password: string, role?: UserRole) => Promise<void>;
   register: (payload: { email: string; password: string; username?: string; role?: UserRole }) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setUser: (user: User | null) => void;
   updateUser: (user: User | any) => void;
   dismissSessionExpired: () => void;
@@ -134,11 +134,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem('safedonate_user');
-    setIsSessionExpired(false);
-    // Cookies are cleared by the backend logout endpoint
+  const logout = useCallback(async () => {
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      /* still clear local session if network fails */
+    } finally {
+      setUser(null);
+      localStorage.removeItem('safedonate_user');
+      setIsSessionExpired(false);
+    }
   }, []);
 
   const dismissSessionExpired = useCallback(() => {

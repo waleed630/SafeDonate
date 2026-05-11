@@ -32,6 +32,7 @@ import paymentMethodRoutes from './routes/paymentMethodRoutes.js';
 import messageRoutes from './routes/messageRoutes.js';
 import tagRoutes from './routes/tagRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
+import { stripeWebhook } from './controllers/webhookController.js';
 
 // ===== LOAD ENV VARIABLES (before anything that uses process.env) =====
 const __filename = fileURLToPath(import.meta.url);
@@ -81,6 +82,14 @@ app.use((req, res, next) => {
     req.cookies = req.cookies || {};
     next();
 });
+
+// Stripe webhook MUST use raw body (before express.json) and MUST NOT require JWT
+app.post(
+    '/api/donations/webhook/stripe',
+    express.raw({ type: 'application/json' }),
+    stripeWebhook
+);
+
 // ✅ Increase payload limit to 50MB for image uploads
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -105,10 +114,9 @@ app.use(passport.session());
 // ====================== ROUTES (Phase 1 - Only Auth) ======================
 app.use("/api/auth", authRoutes);
 app.use('/api/campaigns', campaignRoutes);
+// Longer prefix first — otherwise /api/donations catches /api/donations/tracking/* and returns 404
+app.use('/api/donations/tracking', donationTrackingRoutes);
 app.use('/api/donations', donationRoutes);
-
-// // Donation Tracking Routes (History, Receipt, Campaign-level)
-app.use("/api/donations/tracking", donationTrackingRoutes);
 // Real-Time Module (Live System Updates)
 app.use("/api/notifications", notificationRoutes);
 // analytics

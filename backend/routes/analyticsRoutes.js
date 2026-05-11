@@ -6,7 +6,8 @@ import {
   getFundraiserAnalytics,
   getPlatformAnalytics,
   getPublicAnalytics,
-  getTransactionVolume
+  getTransactionVolume,
+  getCampaignAnalytics,
 } from '../controllers/analyticsController.js';
 
 import protect from '../middleware/authMiddleware.js';
@@ -17,6 +18,12 @@ router.get('/public', getPublicAnalytics);
 
 // Fundraiser routes
 router.get('/fundraiser', protect, restrictTo('fundraiser'), getFundraiserAnalytics);
+router.get(
+  '/campaign/:campaignId',
+  protect,
+  restrictTo('fundraiser', 'admin'),
+  getCampaignAnalytics,
+);
 
 // Admin routes
 router.get('/platform', protect, restrictTo('admin'), getPlatformAnalytics);

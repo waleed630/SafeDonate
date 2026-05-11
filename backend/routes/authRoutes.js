@@ -98,7 +98,9 @@ router.get(
 router.get("/me", protect, async (req, res) => {
     try {
         // Get full user data including profilePicture
-        const user = await User.findById(req.user.id).select('_id username email role profilePicture');
+        const user = await User.findById(req.user.id).select(
+            '_id username email role profilePicture completedCampaignsCount completedCampaignDonorsTotal',
+        );
         res.json({
             success: true,
             user: user

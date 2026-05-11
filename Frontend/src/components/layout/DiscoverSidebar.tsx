@@ -21,8 +21,8 @@ export function DiscoverSidebar({ isOpen = false, onClose }: DiscoverSidebarProp
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login');
     onClose?.();
   };

@@ -12,15 +12,20 @@ const getAIFraudScore = async (description) => {
     return 0;
   }
 
+  const text = String(description ?? '');
+  if (!text.trim()) {
+    return 0;
+  }
+
   try {
     console.log('🤖 [AI MODEL] Starting HuggingFace BART analysis...');
-    console.log('📝 [AI MODEL] Description length:', description.length, 'characters');
+    console.log('📝 [AI MODEL] Description length:', text.length, 'characters');
     
     const response = await axios.post(
      
       "https://router.huggingface.co/hf-inference/models/facebook/bart-large-mnli", 
       {
-        inputs: description,
+        inputs: text,
         parameters: {
           candidate_labels: [
             "legitimate campaign",
@@ -82,6 +87,7 @@ const getAIFraudScore = async (description) => {
 
     // Fallback if no scam/fraud labels found
     console.warn('⚠️ [AI MODEL] No fraud indicators detected');
+    return 0;
   } catch (err) {
     console.error("HuggingFace ERROR:", err.response?.data || err.message);
     return 0;
@@ -92,8 +98,12 @@ const calculateFraudScore = async (campaign) => {
   console.log('\n📊 [FRAUD ANALYSIS] Starting fraud score calculation for:', campaign._id);
   let score = 0;
 
+  const description = String(campaign?.description ?? '');
+  const images = Array.isArray(campaign?.images) ? campaign.images : [];
+  const updates = Array.isArray(campaign?.updates) ? campaign.updates : [];
+
   // Rule 1: Very short description
-  if (campaign.description.length < 150) {
+  if (description.length < 150) {
     console.log('⚠️ Rule 1 triggered: Short description (<150 chars) | +30 points');
     score += 30;
   } else {
@@ -101,7 +111,8 @@ const calculateFraudScore = async (campaign) => {
   }
 
   // Rule 2: Unrealistically high goal with no updates
-  if (campaign.goalAmount > 50000 && campaign.updates.length === 0) {
+  const goalAmount = Number(campaign?.goalAmount) || 0;
+  if (goalAmount > 50000 && updates.length === 0) {
     console.log('⚠️ Rule 2 triggered: High goal (>$50k) with no updates | +25 points');
     score += 25;
   } else {
@@ -109,7 +120,7 @@ const calculateFraudScore = async (campaign) => {
   }
 
   // Rule 3: No images
-  if (campaign.images.length === 0) {
+  if (images.length === 0) {
     console.log('⚠️ Rule 3 triggered: No images | +20 points');
     score += 20;
   } else {
@@ -118,7 +129,7 @@ const calculateFraudScore = async (campaign) => {
 
   // Rule 4: Suspicious keywords
   const suspiciousWords = ['urgent', 'help me', 'god bless', 'emergency', 'please help'];
-  const descLower = campaign.description.toLowerCase();
+  const descLower = description.toLowerCase();
   if (suspiciousWords.some(word => descLower.includes(word))) {
     console.log('⚠️ Rule 4 triggered: Suspicious keywords detected | +15 points');
     score += 15;
@@ -128,7 +139,7 @@ const calculateFraudScore = async (campaign) => {
 
   // AI Score (Open Source Model)
   console.log('\n🤖 [FRAUD ANALYSIS] Calling AI model for deep analysis...');
-  const aiScore = await getAIFraudScore(campaign.description);
+  const aiScore = await getAIFraudScore(description);
   console.log('🤖 [FRAUD ANALYSIS] AI model returned score:', aiScore);
   score += aiScore;
 
@@ -149,6 +160,7 @@ const verifyCampaign = async (req, res) => {
     if (action === "approve") {
       const fraudScore = await calculateFraudScore(campaign);
       campaign.verified = true;
+      campaign.adminPaused = false;
       campaign.fraudScore = fraudScore;
       campaign.verifiedBy = req.user._id;
       campaign.verifiedAt = new Date();
@@ -178,18 +190,22 @@ const verifyCampaign = async (req, res) => {
 // ==================== GET PENDING CAMPAIGNS (FIXED) ====================
  const getPendingCampaigns = async (req, res) => {
   try {
-    // This is the cleanest and most reliable query
-    const campaigns = await Campaign.find({ 
-     verified: false    // ← This excludes all campaigns where verified = true
+    const campaigns = await Campaign.find({
+      verified: false,
+      status: 'pending',
     })
-      .populate('fundraiser', 'username email')
+      .populate('fundraiser', 'username email profilePicture')
       .sort({ createdAt: -1 });
 
-    // Calculate fraud score for each campaign if not already set
     const campaignsWithScores = await Promise.all(
       campaigns.map(async (campaign) => {
         if (!campaign.fraudScore) {
-          campaign.fraudScore = await calculateFraudScore(campaign);
+          try {
+            campaign.fraudScore = await calculateFraudScore(campaign);
+          } catch (err) {
+            logger.warn(`Fraud score skipped for campaign ${campaign._id}:`, err?.message || err);
+            campaign.fraudScore = 0;
+          }
         }
         return campaign;
       })

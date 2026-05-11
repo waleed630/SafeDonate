@@ -1,39 +1,82 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { mockCampaignComments, formatTimestamp, type CampaignComment } from '../../data/mockData';
 import { useAuth } from '../../contexts/AuthContext';
+import api from '../../api/axios';
 
 interface CampaignCommentsProps {
-  campaignId: number;
+  campaignId: string;
   organizerName?: string;
   className?: string;
 }
 
+interface CampaignComment {
+  _id: string;
+  id: string;
+  text: string;
+  createdAt: string;
+  userId: string;
+  userName: string;
+  userAvatar?: string;
+  isOwner?: boolean;
+}
+
+const formatTimestamp = (date: string) =>
+  new Date(date).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
 export function CampaignComments({ campaignId, className = '' }: CampaignCommentsProps) {
   const { user, isAuthenticated } = useAuth();
-  const [comments, setComments] = useState<CampaignComment[]>(() =>
-    mockCampaignComments.filter((c) => c.campaignId === campaignId)
-  );
+  const [comments, setComments] = useState<CampaignComment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fetchComments = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/campaigns/${campaignId}/comments`);
+      if (response.data?.success) {
+        setComments(response.data.comments || []);
+        setError('');
+      } else {
+        setError('Failed to load comments');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load comments');
+      setComments([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!campaignId) return;
+    fetchComments();
+  }, [campaignId]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || !user) return;
-    setSubmitting(true);
-    const comment: CampaignComment = {
-      id: `c-${Date.now()}`,
-      campaignId,
-      userId: user.id,
-      userName: user.name,
-      userAvatar: user.avatar,
-      text: newComment.trim(),
-      date: new Date().toISOString(),
-      isOwner: false,
-    };
-    setComments((prev) => [comment, ...prev]);
-    setNewComment('');
-    setSubmitting(false);
+    try {
+      setSubmitting(true);
+      const response = await api.post(`/campaigns/${campaignId}/comments`, {
+        text: newComment.trim(),
+      });
+      if (response.data?.success && response.data?.comment) {
+        setComments((prev) => [response.data.comment, ...prev]);
+        setNewComment('');
+      }
+    } catch (err) {
+      console.error('Failed to post comment', err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -62,7 +105,11 @@ export function CampaignComments({ campaignId, className = '' }: CampaignComment
         </p>
       )}
       <div className="space-y-4">
-        {comments.length === 0 ? (
+        {loading ? (
+          <p className="text-slate-500 text-sm">Loading comments...</p>
+        ) : error ? (
+          <p className="text-red-600 text-sm">{error}</p>
+        ) : comments.length === 0 ? (
           <p className="text-slate-500 text-sm">No comments yet. Be the first to share your support!</p>
         ) : (
           comments.map((c) => (
@@ -80,7 +127,7 @@ export function CampaignComments({ campaignId, className = '' }: CampaignComment
                       Campaign owner
                     </span>
                   )}
-                  <span className="text-xs text-slate-400">{formatTimestamp(c.date)}</span>
+                  <span className="text-xs text-slate-400">{formatTimestamp(c.createdAt)}</span>
                 </div>
                 <p className="text-slate-700 text-sm mt-1">{c.text}</p>
               </div>

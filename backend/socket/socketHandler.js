@@ -5,11 +5,58 @@ import Campaign from '../models/Campaign.js';
 import Donation from '../models/Donation.js';
 import mongoose from 'mongoose';
 import { sendEmailNotification } from '../services/notificationService.js';   // We'll create this
+import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
 export let  onlineUsers = new Map();
+const campaignViewers = new Map(); // campaignId -> Set<socketId>
+
+const emitCampaignViewerCount = (io, campaignId) => {
+  const key = String(campaignId);
+  const count = campaignViewers.get(key)?.size || 0;
+  io.emit("campaign:viewers:count", { campaignId: key, count });
+};
+
 const initializeSocket = (io) => {
   // const onlineUsers = new Map(); // userId → socket.id
 
   io.on("connection", (socket) => {
+    socket.on("joinCampaignView", ({ campaignId }) => {
+      const key = String(campaignId || "").trim();
+      if (!key) return;
+
+      if (socket.currentCampaignView && socket.currentCampaignView !== key) {
+        const prevSet = campaignViewers.get(socket.currentCampaignView);
+        if (prevSet) {
+          prevSet.delete(socket.id);
+          if (prevSet.size === 0) {
+            campaignViewers.delete(socket.currentCampaignView);
+          }
+          emitCampaignViewerCount(io, socket.currentCampaignView);
+        }
+      }
+
+      const viewers = campaignViewers.get(key) || new Set();
+      viewers.add(socket.id);
+      campaignViewers.set(key, viewers);
+      socket.currentCampaignView = key;
+      emitCampaignViewerCount(io, key);
+    });
+
+    socket.on("leaveCampaignView", ({ campaignId }) => {
+      const key = String(campaignId || socket.currentCampaignView || "").trim();
+      if (!key) return;
+      const viewers = campaignViewers.get(key);
+      if (viewers) {
+        viewers.delete(socket.id);
+        if (viewers.size === 0) {
+          campaignViewers.delete(key);
+        }
+      }
+      if (socket.currentCampaignView === key) {
+        socket.currentCampaignView = null;
+      }
+      emitCampaignViewerCount(io, key);
+    });
+
     console.log(`🔌 User connected: ${socket.id}`);
 
     // ==================== ONLINE USERS TRACKING ====================
@@ -110,6 +157,7 @@ const initializeSocket = (io) => {
         campaign.raisedAmount += amount;
         campaign.donorCount += 1;
         await campaign.save();
+        await notifyCampaignGoalReachedIfNeeded(campaign._id);
 
         // Broadcast instant progress bar update to everyone
         io.emit("progressUpdate", {
@@ -155,6 +203,17 @@ const initializeSocket = (io) => {
     });
 
     socket.on("disconnect", () => {
+      if (socket.currentCampaignView) {
+        const viewers = campaignViewers.get(socket.currentCampaignView);
+        if (viewers) {
+          viewers.delete(socket.id);
+          if (viewers.size === 0) {
+            campaignViewers.delete(socket.currentCampaignView);
+          }
+        }
+        emitCampaignViewerCount(io, socket.currentCampaignView);
+      }
+
       for (let [userId, socketId] of onlineUsers.entries()) {
         if (socketId === socket.id) {
           onlineUsers.delete(userId);

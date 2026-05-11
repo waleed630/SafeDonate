@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { CampaignCard } from '../CampaignCard';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api/axios';
+import { organizerAvatarUrl } from '../../utils/organizerAvatar';
 
 interface Campaign {
   _id: string;
@@ -16,6 +17,7 @@ interface Campaign {
     _id: string;
     username: string;
     email: string;
+    profilePicture?: string | null;
   };
   progress?: number;
   verified: boolean;
@@ -94,7 +96,7 @@ export function RecommendedCampaigns({
               categoryIcon: 'fa-heart-pulse',
               categoryBadge: 'text-emerald-700',
               titleHover: 'group-hover:text-emerald-700',
-              avatar: 'https://i.pravatar.cc/150?u=' + campaign.fundraiser._id,
+              avatar: organizerAvatarUrl(campaign.fundraiser),
               author: campaign.fundraiser.username,
               title: campaign.title,
               description: campaign.description,

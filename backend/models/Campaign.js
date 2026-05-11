@@ -59,6 +59,16 @@ const campaignSchema = new mongoose.Schema({
         type: Boolean,
         default: false,
     },
+    /** Admin-only: hides campaign from public discover & blocks new donations; fundraiser/admin may still view */
+    adminPaused: {
+        type: Boolean,
+        default: false,
+    },
+    /** True after fundraiser has been notified that raisedAmount >= goalAmount (once per campaign) */
+    goalReachedNotified: {
+        type: Boolean,
+        default: false,
+    },
     fraudScore: {
         type: Number,
         default: 0,           // 0-100 (higher = more suspicious)
@@ -72,7 +82,13 @@ const campaignSchema = new mongoose.Schema({
     updates: [{
         title: { type: String, required: true },
         content: { type: String, required: true },
+        postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
         postedAt: { type: Date, default: Date.now },
+    }],
+    comments: [{
+        user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        text: { type: String, required: true, trim: true, maxlength: 1000 },
+        createdAt: { type: Date, default: Date.now },
     }],
     createdAt: { type: Date, default: Date.now },
 }, {

@@ -4,6 +4,7 @@ import Donation from '../models/Donation.js';
 import Campaign from '../models/Campaign.js';
 import { getFrontendUrl } from '../utils/getFrontendUrl.js';
 import logger from '../utils/logger.js';
+import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
 
 export const createDonationSession = async (req, res) => {
     try {
@@ -23,6 +24,13 @@ export const createDonationSession = async (req, res) => {
 
         const campaign = await Campaign.findById(campaignId);
         if (!campaign) return res.status(404).json({ success: false, message: 'Campaign not found' });
+
+        if (!campaign.verified || campaign.adminPaused) {
+            return res.status(403).json({
+                success: false,
+                message: 'This campaign is not accepting donations right now.',
+            });
+        }
 
         const frontendUrl = getFrontendUrl(req);
         const donorId = req.user?.role === 'donor' ? req.user._id.toString() : undefined;
@@ -207,11 +215,12 @@ export const verifyDonation = async (req, res) => {
                 donation.status = 'completed';
                 await donation.save();
                 
-                // Update campaign raised amount
+                // Update campaign raised amount & donor count (align with webhook)
                 await Campaign.findByIdAndUpdate(
                     donation.campaign._id,
-                    { $inc: { raisedAmount: donation.amount } }
+                    { $inc: { raisedAmount: donation.amount, donorCount: 1 } }
                 );
+                await notifyCampaignGoalReachedIfNeeded(donation.campaign._id);
             }
         }
 

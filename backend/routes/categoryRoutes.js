@@ -20,8 +20,9 @@ router.get('/', getAllCategories);
 router.use(protect, restrictTo('admin'));
 
 router.post('/', createCategory);
+// Static suffix before generic /:id so paths like .../toggle-status are never treated as an id
+router.post('/:id/toggle-status', toggleCategoryStatus);
 router.put('/:id', updateCategory);
 router.delete('/:id', deleteCategory);
-router.post('/:id/toggle-status', toggleCategoryStatus);
 
 export default router;

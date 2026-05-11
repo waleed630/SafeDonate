@@ -4,10 +4,11 @@ import crypto from "crypto";
 import RefreshToken from "../models/RefreshToken.js";
 
 const generateToken = async (user, res) => {
-    // Payload for JWT — includes only essential auth data (no large fields)
+    // Always store string ids in JWT so verify + Campaign queries match Mongo consistently
+    const uid = String(user._id);
     const payload = {
-        id: user._id,
-        userId: user._id,
+        id: uid,
+        userId: uid,
         username: user.username,
         email: user.email,
         role: user.role
