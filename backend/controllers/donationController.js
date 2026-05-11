@@ -138,6 +138,37 @@ export const getRecentDonations = async (req, res) => {
     }
 };
 
+export const getDonationsByCampaign = async (req, res) => {
+    try {
+        const { campaignId } = req.params;
+        console.log('Getting donations for campaign:', campaignId);
+        const donations = await Donation.find({ campaign: campaignId, status: 'completed' })
+            .populate('donor', 'username name email profilePicture')
+            .sort({ timestamp: -1 })
+            .limit(10);
+
+        console.log('Found donations:', donations.length);
+        res.json({
+            success: true,
+            donations: donations.map(d => {
+                const donorName = d.donor?.name || d.donor?.username || d.donor?.email || 'Anonymous';
+                return {
+                    _id: d._id,
+                    id: d._id.toString(),
+                    amount: d.amount,
+                    verified: true,
+                    donorName,
+                    donorAvatar: d.donor?.profilePicture || `https://i.pravatar.cc/150?u=${encodeURIComponent(d.donor?._id?.toString() || donorName)}`,
+                    timestamp: d.timestamp || d.createdAt,
+                };
+            }),
+        });
+    } catch (error) {
+        logger.error('Get donations by campaign error:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+};
+
 export const getAllDonations = async (req, res) => {
     try {
         const donations = await Donation.find()

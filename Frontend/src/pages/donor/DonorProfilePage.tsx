@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { PaymentMethodsSection } from '../../components/profile/PaymentMethodsSection';
 import { SaveSuccessModal } from '../../components/SaveSuccessModal';
@@ -14,25 +14,28 @@ export function DonorProfilePage() {
   
   // Profile form state
   const [name, setName] = useState(user?.name || '');
-  const [profilePicture, setProfilePicture] = useState(user?.avatar || '');
-  const [filePreview, setFilePreview] = useState(user?.avatar || 'https://i.pravatar.cc/150');
+  const [filePreview, setFilePreview] = useState<string>(user?.avatar || ''); // Display - no fallback
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Store file for upload
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
   const [saveError, setSaveError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const justUploadedRef = useRef(false); // Track if we just uploaded
 
   useEffect(() => {
     isPushSupported().then(setPushSupported);
     setPushConfigReady(isFirebaseConfigured());
-  }, []);
 
-  // Update form when user data changes
-  useEffect(() => {
+    // Keep preview in sync with the authenticated user's current picture.
     if (user) {
       setName(user.name || '');
-      setProfilePicture(user.avatar || '');
-      setFilePreview(user.avatar || 'https://i.pravatar.cc/150');
+      setFilePreview(user.avatar || '');
     }
+
+    // Reset selected file when component mounts or user changes
+    setSelectedFile(null);
   }, [user]);
 
   const handlePushToggle = async (checked: boolean) => {
@@ -58,11 +61,27 @@ export function DonorProfilePage() {
   const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Show preview
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setSaveError('Please upload a valid image file');
+        return;
+      }
+
+      // Validate file size (5MB max)
+      if (file.size > 5 * 1024 * 1024) {
+        setSaveError('Image size should be less than 5MB');
+        return;
+      }
+
+      setSelectedFile(file);
+
+      // Create preview
       const reader = new FileReader();
-      reader.onloadend = () => {
-        setFilePreview(reader.result as string);
-        setProfilePicture(reader.result as string);
+      reader.onload = (e) => {
+        const preview = e.target?.result as string;
+        setFilePreview(preview);
+        setSaveError('');
+        console.log('Image selected for upload:', file.name, 'Size:', file.size);
       };
       reader.readAsDataURL(file);
     }
@@ -82,10 +101,39 @@ export function DonorProfilePage() {
         return;
       }
 
-      // Call API to update profile
+      // Step 1: Upload image to Cloudinary if selected
+      let uploadedImageUrl: string | undefined;
+      if (selectedFile) {
+        setUploadingImage(true);
+        const formData = new FormData();
+        formData.append('profilePicture', selectedFile);
+
+        console.log('Uploading image to Cloudinary...');
+        const uploadResponse = await api.post('/users/profile-picture', formData, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+
+        console.log('Image upload response:', {
+          success: uploadResponse.data.success,
+          imageUrl: uploadResponse.data.imageUrl?.substring(0, 100),
+        });
+
+        uploadedImageUrl = uploadResponse.data.imageUrl;
+        setUploadingImage(false);
+      }
+
+      // Step 2: Update name and get latest user data
+      console.log('Updating profile name...');
       const response = await api.put('/users/profile', {
         name: name.trim(),
-        profilePicture: profilePicture || null,
+      });
+
+      console.log('Profile update response:', {
+        success: response.data.success,
+        name: response.data.user?.name,
+        avatar: response.data.user?.profilePicture?.substring(0, 100),
       });
 
       if (response.data.success) {
@@ -94,14 +142,30 @@ export function DonorProfilePage() {
         
         // Update auth context with new user data
         if (updateUser) {
-          updateUser(response.data.user);
+          const updatedUser = {
+            id: response.data.user.id || response.data.user._id,
+            email: response.data.user.email,
+            name: response.data.user.name,
+            role: response.data.user.role,
+            avatar: response.data.user.profilePicture || uploadedImageUrl || undefined,
+          };
+
+          // Update filePreview to keep the saved picture visible immediately.
+          if (updatedUser.avatar) {
+            setFilePreview(updatedUser.avatar);
+          }
+
+          justUploadedRef.current = true;
+          updateUser(updatedUser);
+          setSelectedFile(null);
         }
       }
     } catch (error: any) {
       console.error('Error updating profile:', error);
-      setSaveError(error.response?.data?.message || 'Failed to update profile. Please try again.');
+      setSaveError(error.response?.data?.message || 'Error updating profile. Please try again.');
     } finally {
       setIsSaving(false);
+      setUploadingImage(false);
     }
   };
 
@@ -211,16 +275,16 @@ export function DonorProfilePage() {
 
         <button
           type="submit"
-          disabled={isSaving}
+          disabled={isSaving || uploadingImage}
           className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
         >
-          {isSaving ? (
+          {isSaving || uploadingImage ? (
             <>
               <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Saving...
+              {uploadingImage ? 'Uploading...' : 'Saving...'}
             </>
           ) : (
             'Save Changes'

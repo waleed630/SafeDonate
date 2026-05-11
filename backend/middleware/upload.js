@@ -38,7 +38,7 @@ if (hasCloudinaryConfig) {
         cloudinary,
         params: {
             folder: 'safedonate/campaigns',
-            allowed_formats: ['jpg', 'jpeg', 'png', 'webp'],
+            allowed_formats: ['jpg', 'jpeg', 'png', 'webp','svg'],
         },
     });
 } else {
