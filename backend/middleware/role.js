@@ -18,4 +18,7 @@ const restrictTo = (...roles) => {
     };
 };
 
+/** Alias for readability on admin-only NGO routes */
+export const requireAdmin = restrictTo('admin');
+
 export default restrictTo;

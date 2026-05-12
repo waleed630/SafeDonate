@@ -24,6 +24,13 @@ interface Campaign {
   status: string;
   createdAt: string;
   donorCount?: number;
+  campaign_type?: string;
+  ngo_verification?: {
+    verified?: boolean;
+    level?: string;
+    registry_type?: string;
+    checked_at?: string;
+  };
 }
 
 interface RecommendedCampaignsProps {
@@ -103,6 +110,9 @@ export function RecommendedCampaigns({
               raised: campaign.raisedAmount || 0,
               goal: campaign.goalAmount,
               percent: campaign.progress || Math.round(((campaign.raisedAmount || 0) / campaign.goalAmount) * 100),
+              campaign_type: campaign.campaign_type,
+              ngo_verification: campaign.ngo_verification,
+              status: campaign.status,
             }} 
           />
         ))}

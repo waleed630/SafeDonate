@@ -7,6 +7,7 @@ import Donation from "../models/Donation.js";
 import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
 import { createNotification } from "../services/notificationService.js";
+import { verifyOrganization } from "../services/ngoVerificationService.js";
 
 const isCampaignVisibleToRequester = (campaign, user) => {
   if (!campaign?.adminPaused) return true;
@@ -39,8 +40,27 @@ export const createCampaign = async (req, res) => {
         .json({ success: false, message: "User not authenticated" });
     }
 
-    const { title, category, tags, description, goalAmount, endDate } =
-      req.body ?? {};
+    const {
+      title,
+      category,
+      tags,
+      description,
+      goalAmount,
+      endDate,
+      campaign_type: rawCampaignType,
+      organization_name: rawOrgName,
+      organization_registration_number,
+      registration_number,
+    } = req.body ?? {};
+
+    const campaignType =
+      String(rawCampaignType || "individual").toLowerCase() === "ngo"
+        ? "ngo"
+        : "individual";
+    const orgName = String(rawOrgName || "").trim();
+    const orgReg = String(
+      organization_registration_number || registration_number || "",
+    ).trim();
 
     // ✅ DEBUG: Log raw values (not just existence)
     logger.info(`[CREATE CAMPAIGN] Raw values - title: "${title}", category: "${category}", description length: ${description?.length || 0}, goalAmount: "${goalAmount}", endDate: "${endDate}", tags: "${tags}"`);
@@ -83,6 +103,13 @@ export const createCampaign = async (req, res) => {
         });
     }
 
+    if (campaignType === "ngo" && !orgName) {
+      return res.status(400).json({
+        success: false,
+        message: "Organization name is required for NGO/Organization campaigns",
+      });
+    }
+
     // ✅ BACKEND SAFETY: Validate tag labels by fetching from database
     const dbTags = await Tag.find();
     const VALID_TAG_LABELS = dbTags.map(t => t.label);
@@ -116,17 +143,39 @@ export const createCampaign = async (req, res) => {
     }
     logger.info(`[CREATE CAMPAIGN] Images uploaded: ${images.length}`);
 
-    const campaign = new Campaign({
+    let ngoVerification = null;
+    if (campaignType === "ngo") {
+      const ngoCheck = await verifyOrganization(orgName, orgReg);
+      ngoVerification = {
+        verified: ngoCheck.verified,
+        level: ngoCheck.verification_level,
+        checked_at: new Date(),
+        matched_ngo_id: ngoCheck.matched_record?._id || null,
+        registry_type: ngoCheck.matched_record?.registry_type,
+        admin_rejected: false,
+      };
+    }
+
+    const campaignPayload = {
       title,
-      category: normalizedCategory,  // Use validated, normalized category
-      tags: parsedTags,  // Use validated tag labels
+      category: normalizedCategory,
+      tags: parsedTags,
       description,
       images,
       goalAmount: Number(goalAmount),
       endDate: new Date(endDate),
       fundraiser: req.user._id,
       verified: false,
-    });
+      campaign_type: campaignType,
+      organization_name: campaignType === "ngo" ? orgName : "",
+      organization_registration_number: campaignType === "ngo" ? orgReg : "",
+    };
+
+    if (campaignType === "ngo" && ngoVerification) {
+      campaignPayload.ngo_verification = ngoVerification;
+    }
+
+    const campaign = new Campaign(campaignPayload);
 
     await campaign.save();
 

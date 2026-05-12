@@ -4,9 +4,17 @@ import type { Campaign } from '../data/campaigns';
 import { useRealtime } from '../contexts/RealtimeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { MessageModal } from './MessageModal';
+import type { NgoVerificationSnapshot } from './campaign/NgoVerificationBadge';
+import { NgoVerificationBadge } from './campaign/NgoVerificationBadge';
 
 interface CampaignCardProps {
-  campaign: Omit<Campaign, 'id'> & { id: string | number; fundraiserId?: string };
+  campaign: Omit<Campaign, 'id'> & {
+    id: string | number;
+    fundraiserId?: string;
+    campaign_type?: string;
+    ngo_verification?: NgoVerificationSnapshot | null;
+    status?: string;
+  };
   onDonateClick?: (campaignId: string) => void;
 }
 
@@ -57,12 +65,9 @@ export function CampaignCard({ campaign, onDonateClick }: CampaignCardProps) {
     <article className="group bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border border-slate-100 flex flex-col h-full">
       <div className="relative h-56 overflow-hidden">
         <img src={display.image} alt={display.title} className="w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-500" />
-        <div className="absolute top-4 left-4 flex items-center gap-2">
+        <div className="absolute top-4 left-4 flex items-center gap-2 flex-wrap max-w-[85%]">
           <span className={`bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-xs font-bold ${display.categoryBadge} shadow-sm`}>
             <i className={`fa-solid ${display.categoryIcon} mr-1`} /> {display.category}
-          </span>
-          <span className="bg-emerald-500/90 text-white px-2 py-0.5 rounded text-[10px] font-bold flex items-center gap-1">
-            <i className="fa-solid fa-shield-check" /> Verified
           </span>
         </div>
         <button type="button" className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/20 backdrop-blur-sm text-white flex items-center justify-center hover:bg-rose-500 transition-colors">
@@ -85,7 +90,13 @@ export function CampaignCard({ campaign, onDonateClick }: CampaignCardProps) {
           </button>
         </div>
         <h3 className={`text-xl font-bold text-slate-800 mb-2 ${display.titleHover} transition-colors line-clamp-2`}>{display.title}</h3>
-        <p className="text-slate-500 text-sm mb-6 line-clamp-2">{display.description}</p>
+        <NgoVerificationBadge
+          campaignType={display.campaign_type}
+          ngoVerification={display.ngo_verification}
+          campaignStatus={display.status}
+          variant="inline"
+        />
+        <p className="text-slate-500 text-sm mb-6 line-clamp-2 mt-2">{display.description}</p>
         <div className="mt-auto space-y-4">
           <div>
             <div className="flex justify-between text-sm font-semibold mb-2">

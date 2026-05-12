@@ -90,6 +90,29 @@ const campaignSchema = new mongoose.Schema({
         text: { type: String, required: true, trim: true, maxlength: 1000 },
         createdAt: { type: Date, default: Date.now },
     }],
+    campaign_type: {
+        type: String,
+        enum: ['individual', 'ngo'],
+        default: 'individual',
+    },
+    organization_name: { type: String, trim: true, default: '' },
+    organization_registration_number: { type: String, trim: true, default: '' },
+    ngo_verification: {
+        verified: { type: Boolean, default: false },
+        level: {
+            type: String,
+            enum: ['government', 'admin', 'unverified'],
+            default: 'unverified',
+        },
+        checked_at: { type: Date },
+        matched_ngo_id: { type: mongoose.Schema.Types.ObjectId, ref: 'VerifiedNGO', default: null },
+        registry_type: {
+            type: String,
+            enum: ['SECP', 'PCP', 'Provincial', 'Manual'],
+        },
+        admin_rejected: { type: Boolean, default: false },
+        admin_rejection_reason: { type: String, trim: true },
+    },
     createdAt: { type: Date, default: Date.now },
 }, {
     timestamps: true,

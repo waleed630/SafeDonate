@@ -1,8 +1,27 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCategories } from '../contexts/CategoriesContext';
 import { useTags } from '../contexts/TagsContext';
 import api from '../api/axios';
+
+type VerifyApiResponse = {
+  verified: boolean;
+  verification_level: string;
+  matched_record: null | {
+    _id?: string;
+    name?: string;
+    registration_number?: string;
+    registry_type?: string;
+  };
+  message?: string;
+};
+
+type SearchNgo = {
+  _id?: string;
+  name: string;
+  registration_number?: string;
+  registry_type?: string;
+};
 
 export function CreateCampaignPage() {
   const { activeCategories } = useCategories();
@@ -17,11 +36,58 @@ export function CreateCampaignPage() {
     deadline: '',
   });
 
+  const [campaignKind, setCampaignKind] = useState<'individual' | 'ngo'>('individual');
+  const [organizationName, setOrganizationName] = useState('');
+  const [registrationNumber, setRegistrationNumber] = useState('');
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchNgo[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<VerifyApiResponse | null>(null);
+
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [coverImage, setCoverImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDocClick = (e: MouseEvent) => {
+      if (!searchWrapRef.current?.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  useEffect(() => {
+    if (campaignKind !== 'ngo' || organizationName.trim().length < 2) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    const handle = window.setTimeout(async () => {
+      try {
+        const res = await api.get('/ngo/search', { params: { q: organizationName.trim() } });
+        setSearchSuggestions(res.data?.results || []);
+      } catch {
+        setSearchSuggestions([]);
+      }
+    }, 280);
+
+    return () => window.clearTimeout(handle);
+  }, [organizationName, campaignKind]);
+
+  useEffect(() => {
+    if (campaignKind !== 'ngo') {
+      setVerifyResult(null);
+      setOrganizationName('');
+      setRegistrationNumber('');
+      setSearchSuggestions([]);
+    }
+  }, [campaignKind]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.id]: e.target.value });
@@ -35,99 +101,147 @@ export function CreateCampaignPage() {
     }
   };
 
+  const handleCheckVerification = async () => {
+    const name = organizationName.trim();
+    if (!name) {
+      setError('Enter an organization name before checking verification.');
+      return;
+    }
+    setVerifyLoading(true);
+    setError('');
+    try {
+      const res = await api.post('/ngo/verify', {
+        organization_name: name,
+        registration_number: registrationNumber.trim() || undefined,
+      });
+      setVerifyResult(res.data as VerifyApiResponse);
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        'Verification check failed.';
+      setError(msg);
+      setVerifyResult(null);
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const pickSuggestion = (row: SearchNgo) => {
+    setOrganizationName(row.name);
+    if (row.registration_number) setRegistrationNumber(row.registration_number);
+    setShowSuggestions(false);
+    setVerifyResult(null);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
-    // ✅ CLIENT-SIDE VALIDATION
     if (!formData.title.trim()) {
-      setError('❌ Campaign Title is required');
+      setError('Campaign Title is required');
       setLoading(false);
       return;
     }
     if (!formData.category.trim()) {
-      setError('❌ Category is required');
+      setError('Category is required');
       setLoading(false);
       return;
     }
     if (!formData.description.trim()) {
-      setError('❌ Story/Description is required');
+      setError('Story/Description is required');
       setLoading(false);
       return;
     }
-    if (!formData.goal || parseInt(formData.goal) < 100) {
-      setError('❌ Goal Amount must be at least $100');
+    if (!formData.goal || parseInt(formData.goal, 10) < 100) {
+      setError('Goal Amount must be at least $100');
       setLoading(false);
       return;
     }
     if (!formData.deadline) {
-      setError('❌ Campaign End Date is required');
+      setError('Campaign End Date is required');
+      setLoading(false);
+      return;
+    }
+    if (campaignKind === 'ngo' && !organizationName.trim()) {
+      setError('Organization name is required for NGO/Organization campaigns.');
       setLoading(false);
       return;
     }
 
-    // ✅ DEBUG: Log all form data before submission
-    console.log('📋 FORM DATA BEFORE SUBMISSION:', {
-      title: formData.title,
-      category: formData.category,
-      description: formData.description,
-      goal: formData.goal,
-      deadline: formData.deadline,
-      selectedTags: selectedTags,
-      hasImage: !!coverImage,
-    });
-
     const data = new FormData();
 
-    // Text fields - match controller exactly
     data.append('title', formData.title.trim());
     data.append('category', formData.category.trim());
     data.append('description', formData.description.trim());
     data.append('goalAmount', formData.goal);
     data.append('endDate', formData.deadline);
-
-    // Tags - send as comma-separated labels
-    if (selectedTags.length > 0) {
-      const tagsString = selectedTags.join(',');
-      console.log('🚀 Sending tags:', tagsString);
-      data.append('tags', tagsString);
+    data.append('campaign_type', campaignKind === 'ngo' ? 'ngo' : 'individual');
+    if (campaignKind === 'ngo') {
+      data.append('organization_name', organizationName.trim());
+      data.append('organization_registration_number', registrationNumber.trim());
     }
 
-    // Image is OPTIONAL - only append if selected
+    if (selectedTags.length > 0) {
+      data.append('tags', selectedTags.join(','));
+    }
+
     if (coverImage) {
       data.append('images', coverImage);
     }
 
-    // ✅ DEBUG: Log FormData contents
-    console.log('📤 FORMDATA BEING SENT:');
-    for (let [key, value] of data.entries()) {
-      if (value instanceof File) {
-        console.log(`  ${key}: [File] ${value.name}`);
-      } else {
-        console.log(`  ${key}: ${value}`);
-      }
-    }
-
     try {
-      // ✅ Use axios which properly handles FormData with multipart/form-data
-      // IMPORTANT: Do NOT set Content-Type header - let axios/browser handle it
-      console.log('🚀 Sending request to /api/campaigns');
-      
-      const response = await api.post('/campaigns', data);
-
-      console.log('📥 Server Response:', response.status, response.data);
-
-      alert('Campaign created successfully! 🎉');
+      await api.post('/campaigns', data);
+      alert('Campaign created successfully!');
       navigate('/fundraiser/dashboard');
-      
-    } catch (err: any) {
-      console.error('❌ Create campaign error:', err);
-      const errorMsg = err.response?.data?.message || err.message || 'Something went wrong. Please check console and server logs.';
+    } catch (err: unknown) {
+      const errorMsg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        (err as Error)?.message ||
+        'Something went wrong.';
       setError(errorMsg);
     } finally {
       setLoading(false);
     }
+  };
+
+  const renderVerificationPreview = () => {
+    if (!verifyResult) return null;
+
+    if (verifyResult.verified && verifyResult.verification_level === 'government') {
+      const reg = verifyResult.matched_record?.registry_type || 'authority';
+      return (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-900">
+          <p className="font-semibold flex items-center gap-2">
+            <span className="text-emerald-600 text-lg">✓</span>
+            Verified NGO — Registered with {reg}
+          </p>
+          <p className="text-sm mt-2 text-emerald-800/90">{verifyResult.message}</p>
+        </div>
+      );
+    }
+
+    if (!verifyResult.verified && verifyResult.matched_record) {
+      return (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950">
+          <p className="font-semibold flex items-center gap-2">
+            <span className="text-amber-600 text-lg">⚠</span>
+            Pending Verification — Admin will review your credentials
+          </p>
+          <p className="text-sm mt-2 text-amber-900/90">{verifyResult.message}</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-950">
+        <p className="font-semibold flex items-center gap-2">
+          <span className="text-rose-600 text-lg">✗</span>
+          Not Found in Registry — You can still submit but donors will see this status
+        </p>
+        <p className="text-sm mt-2 text-rose-900/90">{verifyResult.message}</p>
+      </div>
+    );
   };
 
   return (
@@ -146,27 +260,111 @@ export function CreateCampaignPage() {
         </div>
       )}
 
-      {/* ✅ DEBUG: Form State Display */}
-      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl text-sm">
-        <h3 className="font-semibold text-blue-900 mb-2">Form Status:</h3>
-        <div className="space-y-1 text-blue-800">
-          <div className={formData.title.trim() ? '✅' : '❌'}>Title: {formData.title ? `"${formData.title}"` : '(empty)'}</div>
-          <div className={formData.category.trim() ? '✅' : '❌'}>Category: {formData.category ? `"${formData.category}"` : '(empty)'}</div>
-          <div className={formData.description.trim() ? '✅' : '❌'}>Description: {formData.description ? `${formData.description.length} chars` : '(empty)'}</div>
-          <div className={formData.goal ? '✅' : '❌'}>Goal Amount: {formData.goal ? `$${formData.goal}` : '(empty)'}</div>
-          <div className={formData.deadline ? '✅' : '❌'}>End Date: {formData.deadline || '(empty)'}</div>
-          <div>Tags: {selectedTags.length > 0 ? selectedTags.join(', ') : '(none selected)'}</div>
-          <div>Image: {coverImage ? `✅ ${coverImage.name}` : '(optional)'}</div>
-        </div>
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Campaign Details */}
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-6">Campaign Details</h2>
           <div className="space-y-5">
             <div>
-              <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-2">Campaign Title *</label>
+              <span className="block text-sm font-medium text-slate-700 mb-2">Campaign type *</span>
+              <div className="flex flex-wrap gap-4">
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="campaignKind"
+                    checked={campaignKind === 'individual'}
+                    onChange={() => setCampaignKind('individual')}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-slate-700">Individual / Personal cause</span>
+                </label>
+                <label className="inline-flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="campaignKind"
+                    checked={campaignKind === 'ngo'}
+                    onChange={() => setCampaignKind('ngo')}
+                    className="text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-slate-700">NGO / Organization</span>
+                </label>
+              </div>
+            </div>
+
+            {campaignKind === 'ngo' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-5 space-y-4">
+                <h3 className="font-semibold text-slate-800">Organization &amp; registry check</h3>
+                <div ref={searchWrapRef} className="relative">
+                  <label htmlFor="organizationName" className="block text-sm font-medium text-slate-700 mb-2">
+                    Organization name *
+                  </label>
+                  <input
+                    type="text"
+                    id="organizationName"
+                    value={organizationName}
+                    onChange={(e) => {
+                      setOrganizationName(e.target.value);
+                      setShowSuggestions(true);
+                      setVerifyResult(null);
+                    }}
+                    onFocus={() => setShowSuggestions(true)}
+                    autoComplete="off"
+                    placeholder="Start typing e.g. Edhi Foundation"
+                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
+                  />
+                  {showSuggestions && searchSuggestions.length > 0 && (
+                    <ul className="absolute z-20 mt-1 w-full max-h-52 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                      {searchSuggestions.map((row) => (
+                        <li key={row._id || row.name}>
+                          <button
+                            type="button"
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-emerald-50 text-slate-800 border-b border-slate-50 last:border-0"
+                            onClick={() => pickSuggestion(row)}
+                          >
+                            <span className="font-medium">{row.name}</span>
+                            {row.registry_type && (
+                              <span className="block text-xs text-slate-500">{row.registry_type}</span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="registrationNumber" className="block text-sm font-medium text-slate-700 mb-2">
+                    Registration number (optional)
+                  </label>
+                  <input
+                    type="text"
+                    id="registrationNumber"
+                    value={registrationNumber}
+                    onChange={(e) => {
+                      setRegistrationNumber(e.target.value);
+                      setVerifyResult(null);
+                    }}
+                    placeholder="e.g. SECP-CUIN-0038921"
+                    className="w-full px-4 py-3 rounded-lg border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCheckVerification}
+                  disabled={verifyLoading}
+                  className="px-5 py-2.5 rounded-lg bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-60 transition-colors"
+                >
+                  {verifyLoading ? 'Checking…' : 'Check Verification'}
+                </button>
+
+                <div className="pt-1">{renderVerificationPreview()}</div>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium text-slate-700 mb-2">
+                Campaign Title *
+              </label>
               <input
                 type="text"
                 id="title"
@@ -179,7 +377,9 @@ export function CreateCampaignPage() {
             </div>
 
             <div>
-              <label htmlFor="category" className="block text-sm font-medium text-slate-700 mb-2">Category *</label>
+              <label htmlFor="category" className="block text-sm font-medium text-slate-700 mb-2">
+                Category *
+              </label>
               <select
                 id="category"
                 value={formData.category}
@@ -189,7 +389,9 @@ export function CreateCampaignPage() {
               >
                 <option value="">Select Category</option>
                 {activeCategories.map((cat) => (
-                  <option key={cat.id} value={cat.label}>{cat.label}</option>
+                  <option key={cat.id} value={cat.label}>
+                    {cat.label}
+                  </option>
                 ))}
               </select>
             </div>
@@ -198,18 +400,19 @@ export function CreateCampaignPage() {
               <label className="block text-sm font-medium text-slate-700 mb-2">Tags</label>
               <div className="flex flex-wrap gap-2">
                 {tags.map((tag) => (
-                  <label key={tag.label} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-500 cursor-pointer transition-colors" style={{ backgroundColor: selectedTags.includes(tag.label) ? '#f0fdf4' : 'transparent' }}>
+                  <label
+                    key={tag.label}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-500 cursor-pointer transition-colors"
+                    style={{ backgroundColor: selectedTags.includes(tag.label) ? '#f0fdf4' : 'transparent' }}
+                  >
                     <input
                       type="checkbox"
                       checked={selectedTags.includes(tag.label)}
                       onChange={(e) => {
                         const tagLabel = tag.label;
                         setSelectedTags((prev) =>
-                          e.target.checked 
-                            ? [...prev, tagLabel]
-                            : prev.filter((t) => t !== tagLabel)
+                          e.target.checked ? [...prev, tagLabel] : prev.filter((t) => t !== tagLabel),
                         );
-                        console.log('Tag toggled:', tagLabel, 'Checked:', e.target.checked);
                       }}
                       className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
@@ -223,7 +426,9 @@ export function CreateCampaignPage() {
             </div>
 
             <div>
-              <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-2">Story *</label>
+              <label htmlFor="description" className="block text-sm font-medium text-slate-700 mb-2">
+                Story *
+              </label>
               <textarea
                 id="description"
                 value={formData.description}
@@ -236,7 +441,9 @@ export function CreateCampaignPage() {
             </div>
 
             <div>
-              <label htmlFor="image" className="block text-sm font-medium text-slate-700 mb-2">Cover Image (Max 5MB)</label>
+              <label htmlFor="image" className="block text-sm font-medium text-slate-700 mb-2">
+                Cover Image (Max 5MB)
+              </label>
               <input
                 type="file"
                 id="image"
@@ -254,12 +461,13 @@ export function CreateCampaignPage() {
           </div>
         </div>
 
-        {/* Funding Goal */}
         <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
           <h2 className="text-lg font-bold text-slate-800 mb-6">Funding Goal</h2>
           <div className="space-y-5">
             <div>
-              <label htmlFor="goal" className="block text-sm font-medium text-slate-700 mb-2">Goal Amount ($) *</label>
+              <label htmlFor="goal" className="block text-sm font-medium text-slate-700 mb-2">
+                Goal Amount ($) *
+              </label>
               <input
                 type="number"
                 id="goal"
@@ -272,7 +480,9 @@ export function CreateCampaignPage() {
               />
             </div>
             <div>
-              <label htmlFor="deadline" className="block text-sm font-medium text-slate-700 mb-2">Campaign End Date *</label>
+              <label htmlFor="deadline" className="block text-sm font-medium text-slate-700 mb-2">
+                Campaign End Date *
+              </label>
               <input
                 type="date"
                 id="deadline"
@@ -295,7 +505,7 @@ export function CreateCampaignPage() {
           </button>
           <Link
             to="/fundraiser/dashboard"
-            className="px-6 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors"
+            className="px-6 py-3.5 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50 transition-colors text-center"
           >
             Cancel
           </Link>

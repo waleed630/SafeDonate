@@ -37,6 +37,7 @@ import { PlatformAnalyticsPage } from './pages/admin/PlatformAnalyticsPage';
 import { ManagePaymentsPage } from './pages/admin/ManagePaymentsPage';
 import { ManageCategoriesPage } from './pages/admin/ManageCategoriesPage';
 import { ManageTagsPage } from './pages/admin/ManageTagsPage';
+import { NgoVerificationRequestsPage } from './pages/admin/NgoVerificationRequestsPage';
 import { DonationSuccessPage } from './pages/DonationSuccessPage';
 import { DonationCancelPage } from './pages/DonationCancelPage';
 
@@ -82,6 +83,7 @@ function App() {
             <Route path="payments" element={<ManagePaymentsPage />} />
             <Route path="categories" element={<ManageCategoriesPage />} />
             <Route path="tags" element={<ManageTagsPage />} />
+            <Route path="ngo-requests" element={<NgoVerificationRequestsPage />} />
           </Route>
         </Route>
 

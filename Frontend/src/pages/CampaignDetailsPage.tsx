@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { campaigns } from '../data/campaigns';
 import { ProgressBar } from '../components/ui/ProgressBar';
 import { Modal } from '../components/ui/Modal';
@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import api from '../api/axios';
 import { organizerAvatarUrl } from '../utils/organizerAvatar';
 import { useSocket } from '../hooks/useSocket';
+import { NgoVerificationBadge } from '../components/campaign/NgoVerificationBadge';
 
 interface CampaignData {
   _id: string;
@@ -23,6 +24,14 @@ interface CampaignData {
   raisedAmount: number;
   donorCount?: number;
   adminPaused?: boolean;
+  status?: string;
+  campaign_type?: string;
+  ngo_verification?: {
+    verified?: boolean;
+    level?: string;
+    registry_type?: string;
+    checked_at?: string;
+  };
   updates?: {
     _id?: string;
     title: string;
@@ -65,7 +74,6 @@ const formatTimestamp = (date: string) =>
 
 export function CampaignDetailsPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const { user } = useAuth() || { user: null };
   const { socket } = useSocket();
   const [campaign, setCampaign] = useState<CampaignData | null>(null);
@@ -285,6 +293,14 @@ export function CampaignDetailsPage() {
   // Use real campaign data if available, otherwise fallback to mock (not when platform-restricted for public)
   const displayCampaign = campaign || fallbackCampaign;
 
+  const raisedForSidebar = campaign
+    ? campaign.raisedAmount
+    : fallbackCampaign.raised;
+  const goalForSidebar = campaign ? campaign.goalAmount : fallbackCampaign.goal;
+  const pctForSidebar = campaign
+    ? Math.round((campaign.raisedAmount / Math.max(1, campaign.goalAmount)) * 100)
+    : fallbackCampaign.percent;
+
   return (
     <div className="py-6 sm:py-10 px-4 sm:px-6 md:px-8 max-w-5xl mx-auto">
       <Link to="/campaigns" className="text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-2 mb-6">
@@ -329,6 +345,16 @@ export function CampaignDetailsPage() {
 
           <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">{displayCampaign.title}</h1>
+            {campaign?.campaign_type === 'ngo' && (
+              <div className="mb-4">
+                <NgoVerificationBadge
+                  campaignType={campaign.campaign_type}
+                  ngoVerification={campaign.ngo_verification}
+                  campaignStatus={campaign.status}
+                  variant="prominent"
+                />
+              </div>
+            )}
             {campaign?.adminPaused && (
               <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 <span className="font-bold">
@@ -439,10 +465,10 @@ export function CampaignDetailsPage() {
             <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
               <div className="mb-6">
                 <div className="flex justify-between text-sm font-semibold text-slate-700 mb-2">
-                  <span className="text-emerald-600">${campaign?.raisedAmount?.toLocaleString() ?? displayCampaign.raised?.toLocaleString()} raised</span>
-                  <span>of ${campaign?.goalAmount?.toLocaleString() ?? displayCampaign.goal?.toLocaleString()}</span>
+                  <span className="text-emerald-600">${raisedForSidebar.toLocaleString()} raised</span>
+                  <span>of ${goalForSidebar.toLocaleString()}</span>
                 </div>
-                <ProgressBar value={campaign ? Math.round((campaign.raisedAmount / campaign.goalAmount) * 100) : displayCampaign.percent} showLabel size="md" />
+                <ProgressBar value={pctForSidebar} showLabel size="md" />
               </div>
               <OnlineViewers count={campaignViewerCount} className="mb-6" />
               <p className="text-slate-500 text-sm mb-6">

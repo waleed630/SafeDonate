@@ -11,6 +11,7 @@ import { LiveDonationMarquee } from '../components/live/LiveDonationMarquee';
 import { useTagsOptional } from '../contexts/TagsContext';
 import api from '../api/axios';
 import { organizerAvatarUrl } from '../utils/organizerAvatar';
+import { NgoVerificationBadge } from '../components/campaign/NgoVerificationBadge';
 
 interface CampaignItem {
   id: string;
@@ -30,6 +31,14 @@ interface CampaignItem {
   createdAt: string;
   urgent?: boolean;
   tagIds?: string[];
+  campaign_type?: string;
+  ngo_verification?: {
+    verified?: boolean;
+    level?: string;
+    registry_type?: string;
+    checked_at?: string;
+  };
+  status?: string;
 }
 
 /** Showcase hero when there is no clear “most donated” leader from live data */
@@ -112,6 +121,9 @@ function normalizeCampaignFromApi(c: any): CampaignItem {
     createdAt: c.createdAt || new Date().toISOString(),
     urgent: c.urgent || false,
     tagIds: c.tags || [],
+    campaign_type: c.campaign_type,
+    ngo_verification: c.ngo_verification,
+    status: c.status,
   };
 }
 
@@ -632,6 +644,12 @@ export function CampaignsPage() {
                     <h3 className="font-serif text-lg sm:text-xl font-bold text-slate-900 mb-2 sm:mb-3 leading-snug group-hover:text-emerald-700 transition-colors">
                       {campaign.title}
                     </h3>
+                    <NgoVerificationBadge
+                      campaignType={campaign.campaign_type}
+                      ngoVerification={campaign.ngo_verification}
+                      campaignStatus={campaign.status}
+                      variant="inline"
+                    />
                     <p className="text-slate-600 text-xs sm:text-sm leading-relaxed mb-4 sm:mb-6 line-clamp-2">{campaign.description}</p>
                     <div className="mt-auto space-y-4">
                       <div>
