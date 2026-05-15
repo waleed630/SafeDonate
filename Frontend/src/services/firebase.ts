@@ -43,7 +43,15 @@ export async function getPushToken(): Promise<string | null> {
   const msg = getFirebaseMessaging();
   if (!msg) return null;
   try {
-    const token = await getToken(msg, { vapidKey });
+    let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      serviceWorkerRegistration =
+        (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.ready);
+    }
+    const token = await getToken(msg, {
+      vapidKey,
+      ...(serviceWorkerRegistration ? { serviceWorkerRegistration } : {}),
+    });
     return token;
   } catch {
     return null;

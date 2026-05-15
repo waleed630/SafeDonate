@@ -8,7 +8,7 @@ interface MobileHeaderProps {
 
 export function MobileHeader({ onMenuClick, title, showLogo = true }: MobileHeaderProps) {
   return (
-    <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-sm">
+    <header className="lg:hidden sticky top-0 z-30 flex items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-sm">
       <button
         type="button"
         onClick={onMenuClick}

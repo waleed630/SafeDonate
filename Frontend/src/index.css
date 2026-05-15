@@ -1,11 +1,26 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
 }
+html {
+  /* Dynamic viewport for mobile/PWA; avoids 100vh clipping with browser chrome */
+  min-height: 100dvh;
+}
+
+#root {
+  min-height: 100dvh;
+  min-height: 100svh;
+}
+
+@supports (min-height: 100dvh) {
+  #root {
+    min-height: 100dvh;
+  }
+}
+
 
 * {
   color-scheme: light;

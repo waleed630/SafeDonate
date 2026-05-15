@@ -556,7 +556,7 @@ export function CampaignDetailsPage() {
               <p className="text-sm text-red-700">{paymentError}</p>
             </div>
           )}
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[25, 50, 100, 250].map((amt) => (
               <button
                 key={amt}

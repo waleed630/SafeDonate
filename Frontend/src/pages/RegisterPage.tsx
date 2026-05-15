@@ -283,7 +283,7 @@ export function RegisterPage() {
 
               {/* Role Toggle */}
               <div className="mb-8 p-1 bg-gray-100 rounded-xl flex relative">
-                <div className="w-1/2">
+                <div className="w-1/2 min-w-0">
                   <input
                     type="radio"
                     name="role"
@@ -294,17 +294,17 @@ export function RegisterPage() {
                   />
                   <label
                     htmlFor="role-donor"
-                    className={`flex items-center justify-center gap-2 w-full py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-all duration-200 ${
+                    className={`flex items-center justify-center gap-1.5 sm:gap-2 w-full py-2.5 px-1 text-xs sm:text-sm font-medium rounded-lg cursor-pointer transition-all duration-200 ${
                       role === 'donor'
                         ? 'bg-white text-emerald-700 shadow-sm'
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <i className="fa-solid fa-heart" />
-                    I want to Donate
+                    <i className="fa-solid fa-heart shrink-0" />
+                    <span className="truncate"><span className="hidden min-[340px]:inline">I want to </span>Donate</span>
                   </label>
                 </div>
-                <div className="w-1/2">
+                <div className="w-1/2 min-w-0">
                   <input
                     type="radio"
                     name="role"
@@ -315,14 +315,14 @@ export function RegisterPage() {
                   />
                   <label
                     htmlFor="role-fundraiser"
-                    className={`flex items-center justify-center gap-2 w-full py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-all duration-200 ${
+                    className={`flex items-center justify-center gap-1.5 sm:gap-2 w-full py-2.5 px-1 text-xs sm:text-sm font-medium rounded-lg cursor-pointer transition-all duration-200 ${
                       role === 'fundraiser'
                         ? 'bg-white text-emerald-700 shadow-sm'
                         : 'text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    <i className="fa-solid fa-hand-holding-dollar" />
-                    I want to Fundraise
+                    <i className="fa-solid fa-hand-holding-dollar shrink-0" />
+                    <span className="truncate"><span className="hidden min-[340px]:inline">I want to </span>Fundraise</span>
                   </label>
                 </div>
               </div>

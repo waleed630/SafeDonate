@@ -259,13 +259,13 @@ export function LoginRegister() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-2">Sign in as</label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-2">
                     {(['donor', 'fundraiser', 'admin'] as const).map((r) => (
                       <button
                         key={r}
                         type="button"
                         onClick={() => setRole(r)}
-                        className={`py-2 rounded-lg text-sm font-medium transition-colors ${
+                        className={`py-2.5 rounded-lg text-xs min-[380px]:text-sm font-medium transition-colors ${
                           role === r ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
