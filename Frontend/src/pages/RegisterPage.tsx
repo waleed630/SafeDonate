@@ -422,7 +422,15 @@ export function RegisterPage() {
                     <input id="terms" type="checkbox" className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer" />
                   </div>
                   <label htmlFor="terms" className="text-sm text-gray-600">
-                    I agree to the <a href="#" className="text-emerald-700 hover:underline">Terms of Service</a> and <a href="#" className="text-emerald-700 hover:underline">Privacy Policy</a>.
+                    I agree to the{' '}
+                    <Link to="/terms" className="text-emerald-700 hover:underline">
+                      Terms of Service
+                    </Link>{' '}
+                    and{' '}
+                    <Link to="/privacy" className="text-emerald-700 hover:underline">
+                      Privacy Policy
+                    </Link>
+                    .
                   </label>
                 </div>
 
@@ -447,12 +455,12 @@ export function RegisterPage() {
           <footer className="bg-gray-50 text-gray-500 border-t border-gray-100 mt-auto">
             <div className="px-8 py-6 text-center">
               <p className="text-xs">&copy; 2025 SafeDonate. All rights reserved.</p>
-              <div className="flex justify-center gap-4 mt-2 text-xs">
-                <a href="#" className="hover:text-emerald-700 transition-colors">Privacy</a>
+              <div className="flex justify-center flex-wrap gap-x-4 gap-y-2 mt-2 text-xs">
+                <Link to="/privacy" className="hover:text-emerald-700 transition-colors">Privacy</Link>
                 <span className="text-gray-300">•</span>
-                <a href="#" className="hover:text-emerald-700 transition-colors">Terms</a>
+                <Link to="/terms" className="hover:text-emerald-700 transition-colors">Terms</Link>
                 <span className="text-gray-300">•</span>
-                <a href="#" className="hover:text-emerald-700 transition-colors">Help</a>
+                <Link to="/contact" className="hover:text-emerald-700 transition-colors">Contact</Link>
               </div>
             </div>
           </footer>

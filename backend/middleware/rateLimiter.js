@@ -31,4 +31,9 @@ const loginLimiter = createLimiter({
     max: 8                      // 8 attempts per 15 min (strong protection)
 });
 
-export { authLimiter, loginLimiter };
+const contactLimiter = createLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 25,
+});
+
+export { authLimiter, loginLimiter, contactLimiter };

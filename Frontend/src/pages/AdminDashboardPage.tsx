@@ -124,6 +124,10 @@ export function AdminDashboardPage() {
           <Link to="/admin/categories" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">Categories</Link>
           <span className="text-slate-300">•</span>
           <Link to="/admin/tags" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">Tags</Link>
+          <span className="text-slate-300">•</span>
+          <Link to="/admin/contact-messages" className="text-sm text-emerald-600 hover:text-emerald-700 font-medium">
+            Contact messages
+          </Link>
         </div>
       </div>
 

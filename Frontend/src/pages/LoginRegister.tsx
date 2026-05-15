@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../hooks/use-toast';
 import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
@@ -523,13 +523,13 @@ export function LoginRegister() {
                   </div>
                   <label htmlFor="terms" className="text-sm text-slate-500">
                     I agree to the{' '}
-                    <a href="#" className="text-emerald-600 hover:underline">
+                    <Link to="/terms" className="text-emerald-600 hover:underline">
                       Terms of Service
-                    </a>{' '}
+                    </Link>{' '}
                     and{' '}
-                    <a href="#" className="text-emerald-600 hover:underline">
+                    <Link to="/privacy" className="text-emerald-600 hover:underline">
                       Privacy Policy
-                    </a>
+                    </Link>
                     .
                   </label>
                 </div>
@@ -548,11 +548,21 @@ export function LoginRegister() {
           <div className="mt-10 text-center">
             <p className="text-sm text-slate-400">
               Protected by reCAPTCHA and subject to the Google{' '}
-              <a href="#" className="underline hover:text-slate-600">
+              <a
+                href="https://policies.google.com/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-slate-600"
+              >
                 Privacy Policy
               </a>{' '}
               and{' '}
-              <a href="#" className="underline hover:text-slate-600">
+              <a
+                href="https://policies.google.com/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-slate-600"
+              >
                 Terms of Service
               </a>
               .

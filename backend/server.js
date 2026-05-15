@@ -33,6 +33,7 @@ import messageRoutes from './routes/messageRoutes.js';
 import tagRoutes from './routes/tagRoutes.js';
 import categoryRoutes from './routes/categoryRoutes.js';
 import ngoRoutes from './routes/ngoRoutes.js';
+import contactRoutes from './routes/contactRoutes.js';
 import { stripeWebhook } from './controllers/webhookController.js';
 
 // ===== LOAD ENV VARIABLES (before anything that uses process.env) =====
@@ -131,6 +132,7 @@ app.use("/api/messages", messageRoutes); // Message and chat routes
 app.use("/api/tags", tagRoutes); // Campaign tags management
 app.use("/api/categories", categoryRoutes); // Campaign categories management
 app.use("/api/ngo", ngoRoutes); // Pakistani NGO registry verification
+app.use("/api/contact", contactRoutes);
 // ====================== HEALTH CHECK ======================
 app.get("/", (req, res) => {
     res.json({

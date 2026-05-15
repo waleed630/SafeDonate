@@ -9,9 +9,9 @@ export function Footer() {
         </div>
         <div className="flex flex-wrap items-center justify-center sm:justify-end gap-4 sm:gap-6">
           <Link to="/about" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">About</Link>
-          <a href="#" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Privacy Policy</a>
-          <a href="#" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Terms of Service</a>
-          <a href="#" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Contact</a>
+          <Link to="/contact" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Contact Us</Link>
+          <Link to="/terms" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Terms of Service</Link>
+          <Link to="/privacy" className="text-sm text-gray-600 hover:text-emerald-600 transition-colors">Privacy Policy</Link>
         </div>
       </div>
     </footer>

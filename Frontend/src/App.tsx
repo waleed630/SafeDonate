@@ -13,6 +13,9 @@ import { CampaignsPage } from './pages/CampaignsPage';
 import { CampaignDetailsPage } from './pages/CampaignDetailsPage';
 import { FeaturedCampaignsPage } from './pages/FeaturedCampaignsPage';
 import { AboutPage } from './pages/AboutPage';
+import { PrivacyPolicyPage } from './pages/PrivacyPolicyPage';
+import { TermsOfServicePage } from './pages/TermsOfServicePage';
+import { ContactPage } from './pages/ContactPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import { DonorDashboardPage } from './pages/DonorDashboardPage';
@@ -38,6 +41,7 @@ import { ManagePaymentsPage } from './pages/admin/ManagePaymentsPage';
 import { ManageCategoriesPage } from './pages/admin/ManageCategoriesPage';
 import { ManageTagsPage } from './pages/admin/ManageTagsPage';
 import { NgoVerificationRequestsPage } from './pages/admin/NgoVerificationRequestsPage';
+import { ManageContactMessagesPage } from './pages/admin/ManageContactMessagesPage';
 import { DonationSuccessPage } from './pages/DonationSuccessPage';
 import { DonationCancelPage } from './pages/DonationCancelPage';
 
@@ -49,6 +53,9 @@ function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<LandingPage />} />
           <Route path="about" element={<AboutPage />} />
+          <Route path="privacy" element={<PrivacyPolicyPage />} />
+          <Route path="terms" element={<TermsOfServicePage />} />
+          <Route path="contact" element={<ContactPage />} />
           <Route path="campaigns/featured" element={<FeaturedCampaignsPage />} />
           <Route path="campaigns/:id" element={<CampaignDetailsPage />} />
           <Route path="donation/success" element={<DonationSuccessPage />} />
@@ -84,6 +91,7 @@ function App() {
             <Route path="categories" element={<ManageCategoriesPage />} />
             <Route path="tags" element={<ManageTagsPage />} />
             <Route path="ngo-requests" element={<NgoVerificationRequestsPage />} />
+            <Route path="contact-messages" element={<ManageContactMessagesPage />} />
           </Route>
         </Route>
 
