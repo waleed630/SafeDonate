@@ -39,8 +39,10 @@ import { stripeWebhook } from './controllers/webhookController.js';
 // ===== LOAD ENV VARIABLES (before anything that uses process.env) =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-dotenv.config({ path: path.join(__dirname, ".env") });
-
+// dotenv.config({ path: path.join(__dirname, ".env") });
+if (process.env.NODE_ENV !== 'production') {
+  dotenv.config({ path: path.join(__dirname, ".env") });
+}
 // ===== LAZY LOAD PASSPORT (after dotenv is loaded) =====
 await import("./config/passport.js");
 
