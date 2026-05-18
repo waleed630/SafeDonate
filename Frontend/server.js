@@ -54,6 +54,7 @@ const allowedOrigins = [
     // Vite / modern frontend dev server
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "https://safedonate.netlify.app/"
 ];
 
 app.use(
