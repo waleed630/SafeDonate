@@ -54,7 +54,10 @@ const allowedOrigins = [
     // Vite / modern frontend dev server
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+<<<<<<< HEAD
     "https://safedonate.netlify.app"
+=======
+>>>>>>> parent of a13d4b8 (changes in serverjs origin array)
 ];
 
 app.use(
