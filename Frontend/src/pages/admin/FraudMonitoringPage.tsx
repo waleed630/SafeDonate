@@ -133,9 +133,14 @@ export function FraudMonitoringPage() {
     fetchCampaigns();
   }, []);
 
-  const highRiskCount = campaigns.filter(c => c.fraudScore >= 70).length;
-  const mediumRiskCount = campaigns.filter(c => c.fraudScore >= 40 && c.fraudScore < 70).length;
-  const lowRiskCount = campaigns.filter(c => c.fraudScore < 40).length;
+  const scoreOr = (c: Campaign) => c.fraudScore ?? 0;
+
+  const highRiskCount = campaigns.filter((c) => scoreOr(c) >= 70).length;
+  const mediumRiskCount = campaigns.filter((c) => {
+    const s = scoreOr(c);
+    return s >= 40 && s < 70;
+  }).length;
+  const lowRiskCount = campaigns.filter((c) => scoreOr(c) < 40).length;
 
   return (
     <div className="py-6 sm:py-10 px-4 sm:px-6 md:px-8 max-w-6xl mx-auto">
@@ -185,7 +190,8 @@ export function FraudMonitoringPage() {
               </thead>
               <tbody>
                 {campaigns.map((campaign) => {
-                  const severity = getFraudSeverity(campaign.fraudScore);
+                  const score = scoreOr(campaign);
+                  const severity = getFraudSeverity(score);
                   return (
                     <tr key={campaign._id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
                       <td className="px-4 py-4">
@@ -208,13 +214,13 @@ export function FraudMonitoringPage() {
                           <div className="w-12 h-6 bg-slate-200 rounded-full relative">
                             <div
                               className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full transition-all ${
-                                campaign.fraudScore !== undefined && campaign.fraudScore >= 70 ? 'bg-rose-500' : campaign.fraudScore !== undefined && campaign.fraudScore >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
+                                score >= 70 ? 'bg-rose-500' : score >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
                               }`}
-                              style={{ marginLeft: `${campaign.fraudScore !== undefined ? (campaign.fraudScore / 100) * 4 : 0}px` }}
+                              style={{ marginLeft: `${(score / 100) * 4}px` }}
                             />
                           </div>
                           <span className="text-sm font-semibold text-slate-900">
-                            {campaign.fraudScore !== undefined ? campaign.fraudScore : 'Calculating...'}
+                            {campaign.fraudScore !== undefined ? score : 'Calculating...'}
                           </span>
                         </div>
                       </td>
@@ -284,16 +290,16 @@ export function FraudMonitoringPage() {
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-slate-600">Overall Fraud Score</span>
-                  <span className={`text-2xl font-bold ${getFraudSeverity(selectedCampaign.fraudScore).color}`}>
-                    {selectedCampaign.fraudScore}
+                  <span className={`text-2xl font-bold ${getFraudSeverity(scoreOr(selectedCampaign)).color}`}>
+                    {scoreOr(selectedCampaign)}
                   </span>
                 </div>
                 <div className="w-full bg-slate-200 rounded-full h-2">
                   <div
                     className={`h-2 rounded-full ${
-                      selectedCampaign.fraudScore >= 70 ? 'bg-rose-500' : selectedCampaign.fraudScore >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
+                      scoreOr(selectedCampaign) >= 70 ? 'bg-rose-500' : scoreOr(selectedCampaign) >= 40 ? 'bg-amber-500' : 'bg-emerald-500'
                     }`}
-                    style={{ width: `${selectedCampaign.fraudScore}%` }}
+                    style={{ width: `${scoreOr(selectedCampaign)}%` }}
                   />
                 </div>
               </div>

@@ -149,7 +149,7 @@ export function PlatformAnalyticsPage() {
                 <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                  formatter={(value: number) => [`$${Number(value).toLocaleString()}`, 'Amount']}
+                  formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Amount']}
                 />
                 <Bar dataKey="amount" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>

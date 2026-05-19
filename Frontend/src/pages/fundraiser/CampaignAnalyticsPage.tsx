@@ -147,7 +147,7 @@ export function CampaignAnalyticsPage() {
                 <YAxis stroke="#64748b" fontSize={11} tickFormatter={(v) => `$${v}`} />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                  formatter={(value: number) => [`$${Number(value).toLocaleString()}`, 'Amount']}
+                  formatter={(value) => [`$${Number(value ?? 0).toLocaleString()}`, 'Amount']}
                 />
                 <Line type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981' }} />
               </LineChart>

@@ -17,9 +17,9 @@ if (publicKey) {
   console.log('   ⚠️  Please add VITE_STRIPE_PUBLIC_KEY to Frontend/.env.local');
 }
 
-// Check Stripe library
-console.log('\n2. @stripe/react-stripe-js:', 'INSTALLED' ? '✅' : '❌');
-console.log('3. @stripe/stripe-js:', 'INSTALLED' ? '✅' : '❌');
+// Check Stripe library (packages are build-time dependencies of the app)
+console.log('\n2. @stripe/react-stripe-js: ✅ (dependency present if app builds)');
+console.log('3. @stripe/stripe-js: ✅ (dependency present if app builds)');
 
 // Instructions
 console.log('\n=== Setup Instructions ===\n');

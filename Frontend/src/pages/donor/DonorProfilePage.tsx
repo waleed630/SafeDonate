@@ -21,7 +21,6 @@ export function DonorProfilePage() {
   const [saveError, setSaveError] = useState('');
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const justUploadedRef = useRef(false); // Track if we just uploaded
 
   useEffect(() => {

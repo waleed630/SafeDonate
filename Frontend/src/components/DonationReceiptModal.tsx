@@ -1,11 +1,20 @@
 import { Modal } from './ui/Modal';
-import type { Donation } from '../data/mockData';
 import { formatTimestamp } from '../data/mockData';
+
+/** Minimum fields for a receipt (matches API donation history + mock data) */
+export type ReceiptDonation = {
+  transactionId: string;
+  campaign: string;
+  amount: number;
+  timestamp: string;
+  status: string;
+  verified: boolean;
+};
 
 interface DonationReceiptModalProps {
   isOpen: boolean;
   onClose: () => void;
-  donation: Donation | null;
+  donation: ReceiptDonation | null;
 }
 
 export function DonationReceiptModal({ isOpen, onClose, donation }: DonationReceiptModalProps) {

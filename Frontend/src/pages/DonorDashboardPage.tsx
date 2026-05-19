@@ -37,7 +37,7 @@ interface Campaign {
 
 export function DonorDashboardPage() {
   const { user } = useAuth();
-  const { socket, connected } = useSocket();
+  const { socket } = useSocket();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -66,10 +66,15 @@ export function ManageCategoriesPage() {
       setFormError('Label is required');
       return;
     }
+    const editId = editing._id ?? editing.id;
+    if (!editId) {
+      setFormError('Missing category id');
+      return;
+    }
     try {
       setFormLoading(true);
       clearMessages();
-      await updateCategory(editing._id || editing.id, {
+      await updateCategory(String(editId), {
         label: form.label,
         slug: form.slug,
         icon: form.icon,
@@ -87,7 +92,7 @@ export function ManageCategoriesPage() {
 
   const handleDeactivate = async (cat: CategoryItem) => {
     try {
-      await deactivate(cat._id || cat.id);
+      await deactivate(String(cat._id ?? cat.id));
       setSuccessMessage('Category deactivated successfully!');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
@@ -97,7 +102,7 @@ export function ManageCategoriesPage() {
 
   const handleActivate = async (cat: CategoryItem) => {
     try {
-      await activate(cat._id || cat.id);
+      await activate(String(cat._id ?? cat.id));
       setSuccessMessage('Category activated successfully!');
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {

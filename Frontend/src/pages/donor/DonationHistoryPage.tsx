@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 import api from '../../api/axios';
 import { DonationReceiptModal } from '../../components/DonationReceiptModal';
 
@@ -18,7 +17,6 @@ interface Donation {
 }
 
 export function DonationHistoryPage() {
-  const { user } = useAuth();
   const [donations, setDonations] = useState<Donation[]>([]);
 
   const [filter, setFilter] = useState<'all' | 'verified'>('all');

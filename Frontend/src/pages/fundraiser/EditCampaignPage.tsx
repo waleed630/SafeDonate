@@ -132,21 +132,25 @@ export function EditCampaignPage() {
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Tags</label>
               <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <label key={tag.id} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-500 cursor-pointer">
+                {tags.map((tag) => {
+                  const tid = tag._id ?? tag.id;
+                  if (!tid) return null;
+                  return (
+                  <label key={tid} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 hover:border-emerald-500 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={selectedTagIds.includes(tag.id)}
+                      checked={selectedTagIds.includes(tid)}
                       onChange={(e) =>
                         setSelectedTagIds((prev) =>
-                          e.target.checked ? [...prev, tag.id] : prev.filter((id) => id !== tag.id)
+                          e.target.checked ? [...prev, tid] : prev.filter((x) => x !== tid)
                         )
                       }
                       className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
                     />
                     <span className="text-sm text-slate-700">{tag.label}</span>
                   </label>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <div>

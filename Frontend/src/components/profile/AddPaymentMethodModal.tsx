@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import api from '../../api/axios';
 
 const publicKey = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
 
@@ -21,7 +20,7 @@ interface AddPaymentMethodModalProps {
   onSuccess: () => void;
 }
 
-function PaymentForm({ clientSecret, onClose, onSuccess }: Omit<AddPaymentMethodModalProps, 'isOpen'>) {
+function PaymentForm({ onClose, onSuccess }: Pick<AddPaymentMethodModalProps, 'onClose' | 'onSuccess'>) {
   const stripe = useStripe();
   const elements = useElements();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,8 +58,10 @@ function PaymentForm({ clientSecret, onClose, onSuccess }: Omit<AddPaymentMethod
       // Confirm the setup intent with the payment information
       const { error: setupError, setupIntent } = await stripe.confirmSetup({
         elements,
-        clientSecret,
-        confirm: true,
+        redirect: 'if_required',
+        confirmParams: {
+          return_url: `${window.location.origin}${window.location.pathname}`,
+        },
       });
 
       if (setupError) {
@@ -192,7 +193,7 @@ export function AddPaymentMethodModal({
               options={{
                 clientSecret,
                 appearance: {
-                  theme: 'light',
+                  theme: 'stripe',
                   variables: {
                     colorPrimary: '#059669',
                     colorDanger: '#dc2626',
@@ -203,7 +204,7 @@ export function AddPaymentMethodModal({
                 },
               }}
             >
-              <PaymentForm clientSecret={clientSecret} onClose={onClose} onSuccess={onSuccess} />
+              <PaymentForm onClose={onClose} onSuccess={onSuccess} />
             </Elements>
           ) : (
             <div className="flex items-center justify-center h-full">

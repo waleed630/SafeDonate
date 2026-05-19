@@ -29,32 +29,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const refreshInterval = setInterval(async () => {
       try {
-        // Try to refresh proactively
-        const response = await fetch(`${window.location.origin}/api/auth/refresh-token`, {
-          method: 'POST',
-          credentials: 'include', // Include cookies
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            // Update user data
-            const updatedUser = {
-              id: data.user.userId || data.user.id || data.user._id,
-              email: data.user.email,
-              name: data.user.username || data.user.name || '',
-              role: data.user.role,
-              avatar: data.user.profilePicture || undefined,
-            };
-            setUser(updatedUser);
-            localStorage.setItem('safedonate_user', JSON.stringify(updatedUser));
-          }
+        const { data } = await api.post<{ success?: boolean; user?: Record<string, unknown> }>(
+          '/auth/refresh-token',
+        );
+        if (data.success && data.user) {
+          const u = data.user;
+          const updatedUser = {
+            id: String(u.userId ?? u.id ?? u._id ?? ''),
+            email: String(u.email ?? ''),
+            name: String(u.username ?? u.name ?? ''),
+            role: u.role as UserRole,
+            avatar: (u.profilePicture as string) || undefined,
+          };
+          setUser(updatedUser);
+          localStorage.setItem('safedonate_user', JSON.stringify(updatedUser));
         }
       } catch (error) {
-        // Silent fail - automatic refresh will handle it when needed
         console.debug('Proactive token refresh failed:', error);
       }
-    }, 10 * 60 * 1000); // Check every 10 minutes
+    }, 10 * 60 * 1000);
 
     return () => clearInterval(refreshInterval);
   }, [user]);
