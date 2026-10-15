@@ -3,6 +3,17 @@ import stripe from '../config/stripe.js';
 import User from '../models/User.js';
 import logger from '../utils/logger.js';
 
+/** True only if the Stripe payment method is attached to this user's own customer */
+const ownsPaymentMethod = async (user, paymentMethodId) => {
+  if (!user.stripeCustomerId || typeof paymentMethodId !== 'string') return false;
+  try {
+    const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+    return pm?.customer === user.stripeCustomerId;
+  } catch {
+    return false;
+  }
+};
+
 // Get all saved payment methods for the user
 export const getPaymentMethods = async (req, res) => {
   try {
@@ -75,6 +86,10 @@ export const setDefaultPaymentMethod = async (req, res) => {
       });
     }
 
+    if (!(await ownsPaymentMethod(user, paymentMethodId))) {
+      return res.status(404).json({ success: false, message: 'Payment method not found' });
+    }
+
     // Update customer's default payment method
     await stripe.customers.update(user.stripeCustomerId, {
       invoice_settings: {
@@ -114,6 +129,11 @@ export const deletePaymentMethod = async (req, res) => {
       });
     }
 
+    // Users may only remove cards from their own Stripe customer
+    if (!(await ownsPaymentMethod(req.user, paymentMethodId))) {
+      return res.status(404).json({ success: false, message: 'Payment method not found' });
+    }
+
     // Detach payment method from customer
     await stripe.paymentMethods.detach(paymentMethodId);
 
@@ -133,10 +153,6 @@ export const deletePaymentMethod = async (req, res) => {
 // Get Stripe setup intent (for adding new payment method)
 export const createSetupIntent = async (req, res) => {
   try {
-    // Debug logging
-    console.log('[DEBUG] createSetupIntent - STRIPE_SECRET_KEY exists:', !!process.env.STRIPE_SECRET_KEY);
-    console.log('[DEBUG] createSetupIntent - stripe instance:', !!stripe);
-    
     if (!stripe) {
       console.error('[ERROR] Stripe is not configured - STRIPE_SECRET_KEY missing or invalid');
       return res.status(500).json({ 
@@ -193,7 +209,7 @@ export const createSetupIntent = async (req, res) => {
     console.error('Detailed error:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Failed to create setup intent: ' + (error.message || 'Unknown error')
+      message: 'Failed to create setup intent'
     });
   }
 };
