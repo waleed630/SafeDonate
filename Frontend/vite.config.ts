@@ -16,7 +16,15 @@ export default defineConfig({
        * Set to false so the plugin does not inject a second `<link rel="manifest">`.
        */
       manifest: false,
-      includeAssets: ['pwa-192.png', 'pwa-512.png', 'apple-touch-icon.png', 'firebase-messaging-sw.js'],
+      includeAssets: [
+        'favicon.svg',
+        'favicon.ico',
+        'pwa-192.png',
+        'pwa-512.png',
+        'pwa-maskable-512.png',
+        'apple-touch-icon.png',
+        'firebase-messaging-sw.js',
+      ],
       devOptions: {
         enabled: true,
       },
