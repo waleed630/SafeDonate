@@ -1,0 +1,11 @@
+username
+mwaleedbinlatif_db_user
+
+password
+passwordsafedonate123
+
+connection string
+mongodb+srv://mwaleedbinlatif_db_user:passwordsafedonate123@safedonate.w58lzfk.mongodb.net/?appName=SafeDonate
+
+backendurl
+https://safedonate-backend.onrender.com
