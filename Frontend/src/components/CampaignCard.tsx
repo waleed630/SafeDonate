@@ -22,8 +22,7 @@ export function CampaignCard({ campaign, onDonateClick }: CampaignCardProps) {
   const { connected, getProgressOverride } = useRealtime();
   const { user } = useAuth() || { user: null };
   const [showMessageModal, setShowMessageModal] = useState(false);
-  const campaignIdNumber = typeof campaign.id === 'number' ? campaign.id : NaN;
-  const progressOverride = connected && Number.isFinite(campaignIdNumber) ? getProgressOverride(campaignIdNumber) : null;
+  const progressOverride = connected ? getProgressOverride(campaign.id) : null;
   const display = progressOverride
     ? { ...campaign, raised: progressOverride.raised, goal: progressOverride.goal, percent: progressOverride.percent }
     : campaign;

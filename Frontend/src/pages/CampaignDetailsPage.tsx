@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { campaigns } from '../data/campaigns';
 import { ProgressBar } from '../components/ui/ProgressBar';
@@ -82,14 +82,12 @@ export function CampaignDetailsPage() {
   /** Public donor hit a campaign hidden by admin pause */
   const [restrictedPublic, setRestrictedPublic] = useState(false);
   
-  // Fallback to mock data for now
   const realtime = useRealtime();
-  const campaignFromData = campaigns.find((c) => c.id === Number(id)) || campaigns[0];
-  const progressOverride = realtime.getProgressOverride(campaignFromData.id);
-  const fallbackCampaign = useMemo(() => {
-    if (!progressOverride) return campaignFromData;
-    return { ...campaignFromData, raised: progressOverride.raised, goal: progressOverride.goal, percent: progressOverride.percent };
-  }, [campaignFromData, progressOverride]);
+  // Live totals pushed by the server after a confirmed donation
+  const progressOverride = realtime.getProgressOverride(id ?? '');
+  // Static placeholder art only (image/category styling); never shown as a real campaign
+  const campaignFromData = campaigns[0];
+  const fallbackCampaign = campaignFromData;
   
   const [showDonateModal, setShowDonateModal] = useState(false);
   const [donationAmount, setDonationAmount] = useState(25);
@@ -234,8 +232,11 @@ export function CampaignDetailsPage() {
     setPaymentError('');
 
     try {
-      // Get the actual campaign ID (from real data if available, otherwise from mock)
-      const actualCampaignId = campaign?._id || campaignFromData.id;
+      const actualCampaignId = campaign?._id;
+      if (!actualCampaignId) {
+        setPaymentError('Campaign is not loaded yet. Please try again.');
+        return;
+      }
 
       const response = await api.post('/donations/donate', {
         campaignId: actualCampaignId,
@@ -290,16 +291,13 @@ export function CampaignDetailsPage() {
   // Paused: no one (donors, guests, or fundraisers) can start a donation from this page
   const canDonate = !donationsBlocked && !isFundraiser && user?.role === 'donor';
 
-  // Use real campaign data if available, otherwise fallback to mock (not when platform-restricted for public)
+  // The page body only renders once the real campaign has loaded (see below)
   const displayCampaign = campaign || fallbackCampaign;
 
-  const raisedForSidebar = campaign
-    ? campaign.raisedAmount
-    : fallbackCampaign.raised;
-  const goalForSidebar = campaign ? campaign.goalAmount : fallbackCampaign.goal;
-  const pctForSidebar = campaign
-    ? Math.round((campaign.raisedAmount / Math.max(1, campaign.goalAmount)) * 100)
-    : fallbackCampaign.percent;
+  const raisedForSidebar = progressOverride?.raised ?? campaign?.raisedAmount ?? 0;
+  const goalForSidebar = progressOverride?.goal ?? campaign?.goalAmount ?? 0;
+  const pctForSidebar = progressOverride?.percent
+    ?? Math.round((raisedForSidebar / Math.max(1, goalForSidebar)) * 100);
 
   return (
     <div className="py-6 sm:py-10 px-4 sm:px-6 md:px-8 max-w-5xl mx-auto">
@@ -328,7 +326,7 @@ export function CampaignDetailsPage() {
         <p className="text-slate-500 text-center py-8">Campaign not found</p>
       )}
       
-      {!loading && !restrictedPublic && displayCampaign && (
+      {!loading && !restrictedPublic && campaign && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <div className="relative rounded-2xl overflow-hidden shadow-sm border border-slate-100">

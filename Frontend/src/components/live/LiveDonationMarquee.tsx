@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import api from '../../api/axios';
-import { mockLiveDonations } from '../../data/mockData';
 
 interface LiveDonation {
   id: string;
@@ -51,21 +50,20 @@ export function LiveDonationMarquee({ className = '' }: LiveDonationMarqueeProps
           timeAgo: getRelativeTime(d.timestamp),
         }));
 
-        if (normalized.length > 0) {
-          setItems(normalized);
-          return;
-        }
+        setItems(normalized);
       } catch (error) {
-        console.warn('Live donations fetch failed, using fallback mock data.', error);
+        console.warn('Live donations fetch failed.', error);
+        setItems([]);
       }
-
-      setItems(mockLiveDonations);
     };
 
     fetchLiveDonations();
   }, []);
 
-  const displayItems = items.length > 0 ? [...items, ...items] : [...mockLiveDonations, ...mockLiveDonations];
+  // Only real, completed donations are shown; with none yet the bar is simply hidden
+  if (items.length === 0) return null;
+
+  const displayItems = [...items, ...items];
 
   return (
     <div className={`overflow-hidden border-b border-slate-100 bg-white/80 backdrop-blur-sm ${className}`}>

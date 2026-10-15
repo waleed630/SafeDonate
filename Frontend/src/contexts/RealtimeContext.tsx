@@ -8,10 +8,10 @@ import {
   type ReactNode,
 } from 'react';
 import { useSocket } from '../hooks/useSocket';
-import { mockLiveDonations, type LiveDonation } from '../data/mockData';
+import type { LiveDonation } from '../data/mockData';
 
 export interface CampaignProgressUpdate {
-  campaignId: number;
+  campaignId: string;
   raised: number;
   goal: number;
   percent: number;
@@ -20,7 +20,7 @@ export interface CampaignProgressUpdate {
 export interface RealtimeState {
   connected: boolean;
   liveDonations: LiveDonation[];
-  campaignProgress: Record<number, CampaignProgressUpdate>;
+  campaignProgress: Record<string, CampaignProgressUpdate>;
   viewerCount: number;
   campaignViewerCount: Record<number, number>;
   hasNewNotification: boolean;
@@ -28,7 +28,7 @@ export interface RealtimeState {
 
 const RealtimeContext = createContext<RealtimeState & {
   setHasNewNotification: (v: boolean) => void;
-  getProgressOverride: (campaignId: number) => CampaignProgressUpdate | null;
+  getProgressOverride: (campaignId: string | number) => CampaignProgressUpdate | null;
   getViewerCount: (campaignId?: number) => number;
 } | null>(null);
 
@@ -36,15 +36,15 @@ const MAX_LIVE_DONATIONS = 50;
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const { socket, connected } = useSocket();
-  const [liveDonations, setLiveDonations] = useState<LiveDonation[]>(mockLiveDonations.slice(0, 10));
-  const [campaignProgress, setCampaignProgress] = useState<Record<number, CampaignProgressUpdate>>({});
+  const [liveDonations, setLiveDonations] = useState<LiveDonation[]>([]);
+  const [campaignProgress, setCampaignProgress] = useState<Record<string, CampaignProgressUpdate>>({});
   const [viewerCount, setViewerCount] = useState(0);
   const [campaignViewerCount, setCampaignViewerCount] = useState<Record<number, number>>({});
   const [hasNewNotification, setHasNewNotification] = useState(false);
 
   useEffect(() => {
     if (!connected || !socket) {
-      setLiveDonations(mockLiveDonations.slice(0, 10));
+      setLiveDonations([]);
       setViewerCount(0);
       setCampaignViewerCount({});
       return;
@@ -58,7 +58,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     };
 
     const onCampaignProgress = (payload: CampaignProgressUpdate) => {
-      setCampaignProgress((prev) => ({ ...prev, [payload.campaignId]: payload }));
+      setCampaignProgress((prev) => ({ ...prev, [String(payload.campaignId)]: payload }));
     };
 
     const onNotificationsNew = () => {
@@ -88,7 +88,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   }, [connected, socket]);
 
   const getProgressOverride = useCallback(
-    (campaignId: number) => campaignProgress[campaignId] ?? null,
+    (campaignId: string | number) => campaignProgress[String(campaignId)] ?? null,
     [campaignProgress]
   );
 
