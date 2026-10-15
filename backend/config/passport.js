@@ -11,12 +11,20 @@ const __dirname = path.dirname(__filename);
 // dotenv.config({ path: path.join(__dirname, "../../.env") });
 
 // ====================== GOOGLE OAUTH STRATEGY ======================
-passport.use(
+export const isGoogleAuthConfigured = Boolean(
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET,
+);
+
+if (!isGoogleAuthConfigured) {
+  console.warn("⚠️  GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set - Google login disabled");
+}
+
+if (isGoogleAuthConfigured) passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.GOOGLE_CLIENT_ID || "522572457243-kfro32mps56ptpr5m1p1bbi9hhruodpa.apps.googleusercontent.com",
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET || "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4l5m6n7o8p9q0r1s2t3u4v5w6x7y8z9",
-      callbackURL: process.env.GOOGLE_CALLBACK_URL || "http://localhost:5000/auth/google/callback",
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || "http://localhost:5000/api/auth/google/callback",
     },
     async (accessToken, refreshToken, profile, done) => {
       try {

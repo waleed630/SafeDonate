@@ -35,8 +35,8 @@ const uploadProfilePicture = async (req, res) => {
       req.file.location;
 
     // If still no URL, construct it manually from Cloudinary public_id
-    if (!profilePictureUrl && req.file.public_id) {
-      const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME || "dtt20zowa";
+    if (!profilePictureUrl && req.file.public_id && process.env.CLOUDINARY_CLOUD_NAME) {
+      const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
       profilePictureUrl = `https://res.cloudinary.com/${cloudinaryCloudName}/image/upload/${req.file.public_id}`;
     }
 

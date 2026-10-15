@@ -8,9 +8,9 @@ import logger from '../utils/logger.js';
 import dotenv from "dotenv";
 dotenv.config();
 
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME || 'dtt20zowa';
-const cloudApiKey = process.env.CLOUDINARY_API_KEY || '961416198668185';
-const cloudApiSecret = process.env.CLOUDINARY_API_SECRET || 'tVjWdRKV4DjieH__oJ2VIh-g2IQ';
+const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+const cloudApiKey = process.env.CLOUDINARY_API_KEY;
+const cloudApiSecret = process.env.CLOUDINARY_API_SECRET;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

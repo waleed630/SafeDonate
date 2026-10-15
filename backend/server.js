@@ -1,7 +1,5 @@
 // server.js
-import dotenv from "dotenv";
-import path from "path";
-import { fileURLToPath } from "url";
+import "./config/env.js"; // must stay first: loads .env before other modules read process.env
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -36,14 +34,12 @@ import ngoRoutes from './routes/ngoRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import { stripeWebhook } from './controllers/webhookController.js';
 
-// ===== LOAD ENV VARIABLES (before anything that uses process.env) =====
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-// dotenv.config({ path: path.join(__dirname, ".env") });
-if (process.env.NODE_ENV !== 'production') {
-  dotenv.config({ path: path.join(__dirname, ".env") });
+// ===== REQUIRED CONFIG =====
+if (!process.env.JWT_SECRET) {
+    logger.error("JWT_SECRET is not set. Add it to backend/.env before starting the server.");
+    process.exit(1);
 }
-// ===== LAZY LOAD PASSPORT (after dotenv is loaded) =====
+
 await import("./config/passport.js");
 
 const app = express();
@@ -101,7 +97,7 @@ app.use(morganMiddleware);
 
 // ====================== SESSION (REQUIRED FOR OAUTH) ======================
 app.use(session({
-  secret: process.env.JWT_SECRET || 'your-secret-key',
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: { 
@@ -181,9 +177,11 @@ mongoose
         const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
         const ADMIN_PASS = process.env.ADMIN_PASS;
 
-        const adminExists = await User.findOne({ email: ADMIN_EMAIL });
+        const adminExists = ADMIN_EMAIL ? await User.findOne({ email: ADMIN_EMAIL }) : true;
 
-        if (!adminExists) {
+        if (!ADMIN_EMAIL || !ADMIN_PASS) {
+            logger.warn("ADMIN_EMAIL / ADMIN_PASS not set - skipping default admin seeding");
+        } else if (!adminExists) {
             const admin = new User({
                 username: "superadmin",
                 name: "Muhammad Waleed Bin Latif",
@@ -196,7 +194,6 @@ mongoose
 
             logger.status("✅ DEFAULT ADMIN CREATED (Only Admin is seeded)");
             logger.info(`   Email    : ${ADMIN_EMAIL}`);
-            logger.info(`   Password : ${ADMIN_PASS}`);
             logger.info(`   Role     : admin`);
             logger.status("   Donor & Fundraiser → Register normally (no default seeding)");
         } else {

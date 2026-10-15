@@ -3,12 +3,12 @@ import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import { v2 as cloudinary } from 'cloudinary';
 import logger from '../utils/logger.js';
 
-const cloud_name ="dtt20zowa"
-const cloud_api="96141619866815"
-const api_secret="tVjWdRKV4DjieH__oJ2VIh-g2IQ"
+const cloud_name = process.env.CLOUDINARY_CLOUD_NAME;
+const cloud_api = process.env.CLOUDINARY_API_KEY;
+const api_secret = process.env.CLOUDINARY_API_SECRET;
 // Validate Cloudinary config
-const hasCloudinaryConfig = cloud_name && 
-                            cloud_api && 
+const hasCloudinaryConfig = cloud_name &&
+                            cloud_api &&
                             api_secret;
 
 let storage;
@@ -16,9 +16,9 @@ let storage;
 if (hasCloudinaryConfig) {
     logger.info('[PROFILE UPLOAD] Using Cloudinary storage');
     cloudinary.config({
-        cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dtt20zowa",
-        api_key: process.env.CLOUDINARY_API_KEY || "961416198668185",
-        api_secret: process.env.CLOUDINARY_API_SECRET || "tVjWdRKV4DjieH__oJ2VIh-g2IQ",
+        cloud_name,
+        api_key: cloud_api,
+        api_secret,
     });
 
     storage = new CloudinaryStorage({

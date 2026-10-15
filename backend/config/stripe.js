@@ -13,7 +13,7 @@ const STRIPE_KEY = process.env.STRIPE_SECRET_KEY;
 if (STRIPE_KEY) {
   try {
     stripeInstance = new Stripe(STRIPE_KEY);
-    console.log('✅ Stripe initialized successfully with secret key:', STRIPE_KEY.substring(0, 20) + '...');
+    console.log('✅ Stripe initialized successfully');
   } catch (error) {
     console.error('❌ Error initializing Stripe:', error.message);
   }

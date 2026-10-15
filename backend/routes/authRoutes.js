@@ -30,6 +30,10 @@ router.post("/refresh-token", refreshTokenUser);
 
 // ====================== GOOGLE OAUTH ======================
 router.get("/google", (req, res, next) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.redirect(`${getFrontendUrl(req)}/login?error=oauth_unavailable`);
+    }
+
     // Preserve role in session for callback
     const role = req.query.role || "donor"; // Default to donor if not specified
     
@@ -120,8 +124,8 @@ router.get("/admin", protect, restrictTo("admin"), (req, res) => {
 
 // ====================== PASSWORD RESET ======================
 // Email transporter
-const emailUser = process.env.EMAIL_USER || "www.mwaqas.com8@gmail.com";
-const emailPass = process.env.EMAIL_PASS || "zpmdlslnsqkfrmat";
+const emailUser = process.env.EMAIL_USER;
+const emailPass = process.env.EMAIL_PASS;
 
 // Validate email credentials
 if (!emailUser || !emailPass) {
