@@ -1,9 +1,7 @@
 // controllers/webhookController.js
 import stripe from '../config/stripe.js';
-import Donation from '../models/Donation.js';
-import Campaign from '../models/Campaign.js';
 import logger from '../utils/logger.js';
-import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
+import { completeDonationOnce } from '../utils/completeDonation.js';
 
 export const stripeWebhook = async (req, res) => {
     // Check if Stripe is properly initialized
@@ -26,37 +24,26 @@ export const stripeWebhook = async (req, res) => {
         );
     } catch (err) {
         logger.error('Webhook signature verification failed:', err.message);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
+        return res.status(400).send('Webhook signature verification failed');
     }
 
     // ✅ Only handle successful checkout
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object;
 
-        // Find donation
-        const donation = await Donation.findOne({ stripeSessionId: session.id });
-
-        if (donation && donation.status !== 'completed') {   // ← Prevents double processing
-            // === NEW FIELDS FOR TRANSPARENT TRACKING ===
-            donation.status = 'completed';
-            donation.stripePaymentIntentId = session.payment_intent;   // For receipt
-            donation.receiptUrl = session.receipt_url;                 // Direct Stripe receipt link
-
-            await donation.save();
-
-            // Real-time campaign update
-            const campaign = await Campaign.findById(donation.campaign);
-            if (campaign) {
-                campaign.raisedAmount += donation.amount;
-                campaign.donorCount += 1;
-                await campaign.save();
-                await notifyCampaignGoalReachedIfNeeded(campaign._id);
+        if (session.payment_status === 'paid') {
+            try {
+                // Atomic: safe even if /verify handles the same session at the same moment
+                const donation = await completeDonationOnce(session.id, {
+                    stripePaymentIntentId: session.payment_intent,
+                });
+                if (donation) {
+                    logger.info(`✅ Donation completed | ID: ${donation._id} | Amount: ${donation.amount}`);
+                }
+            } catch (err) {
+                logger.error('Webhook donation update failed:', err);
+                return res.status(500).json({ received: false });
             }
-
-            logger.info(`✅ Donation completed & campaign updated | 
-                Donation ID: ${donation._id} | 
-                Amount: ${donation.amount} | 
-                Campaign: ${campaign?.title}`);
         }
     }
 

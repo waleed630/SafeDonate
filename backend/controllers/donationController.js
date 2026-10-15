@@ -1,10 +1,17 @@
 // controllers/donationController.js
+import mongoose from 'mongoose';
 import stripe from '../config/stripe.js';
 import Donation from '../models/Donation.js';
 import Campaign from '../models/Campaign.js';
 import { getFrontendUrl } from '../utils/getFrontendUrl.js';
 import logger from '../utils/logger.js';
-import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
+import { completeDonationOnce } from '../utils/completeDonation.js';
+
+const MIN_DONATION = 1;
+const MAX_DONATION = 100000;
+
+/** Public-facing donor name: never fall back to the email address */
+const publicDonorName = (donor) => donor?.name || donor?.username || 'Anonymous';
 
 export const createDonationSession = async (req, res) => {
     try {
@@ -16,10 +23,22 @@ export const createDonationSession = async (req, res) => {
             });
         }
 
-        const { campaignId, amount } = req.body;
+        const { campaignId } = req.body;
+        const amount = Math.round(Number(req.body.amount) * 100) / 100;
 
         if (req.user && req.user.role && req.user.role !== 'donor') {
             return res.status(403).json({ success: false, message: 'Only donors can make donations' });
+        }
+
+        if (!Number.isFinite(amount) || amount < MIN_DONATION || amount > MAX_DONATION) {
+            return res.status(400).json({
+                success: false,
+                message: `Donation amount must be between $${MIN_DONATION} and $${MAX_DONATION.toLocaleString()}`,
+            });
+        }
+
+        if (!mongoose.Types.ObjectId.isValid(campaignId)) {
+            return res.status(404).json({ success: false, message: 'Campaign not found' });
         }
 
         const campaign = await Campaign.findById(campaignId);
@@ -50,7 +69,7 @@ export const createDonationSession = async (req, res) => {
                     product_data: {
                         name: `Donation to ${campaign.title}`,
                     },
-                    unit_amount: amount * 100, // in cents
+                    unit_amount: Math.round(amount * 100), // in cents, must be an integer
                 },
                 quantity: 1,
             }],
@@ -61,8 +80,6 @@ export const createDonationSession = async (req, res) => {
             metadata,
         });
 
-        console.log('✅ Stripe session created:', session.id);
-        console.log('🔍 Session object:', JSON.stringify(session, null, 2));
 
         const donation = new Donation({
             campaign: campaignId,
@@ -109,16 +126,17 @@ export const getDonationHistory = async (req, res) => {
 
 export const getRecentDonations = async (req, res) => {
     try {
-        const donations = await Donation.find()
+        // Public live feed: only payments that actually went through
+        const donations = await Donation.find({ status: 'completed' })
             .populate('campaign', 'title')
-            .populate('donor', 'username name email profilePicture')
+            .populate('donor', 'username name profilePicture')
             .sort({ timestamp: -1 })
             .limit(5);
 
         res.json({
             success: true,
             donations: donations.map(d => {
-                const donorName = d.donor?.name || d.donor?.username || d.donor?.email || 'Anonymous';
+                const donorName = publicDonorName(d.donor);
                 return {
                     _id: d._id,
                     id: d._id.toString(),
@@ -141,17 +159,15 @@ export const getRecentDonations = async (req, res) => {
 export const getDonationsByCampaign = async (req, res) => {
     try {
         const { campaignId } = req.params;
-        console.log('Getting donations for campaign:', campaignId);
         const donations = await Donation.find({ campaign: campaignId, status: 'completed' })
-            .populate('donor', 'username name email profilePicture')
+            .populate('donor', 'username name profilePicture')
             .sort({ timestamp: -1 })
             .limit(10);
 
-        console.log('Found donations:', donations.length);
         res.json({
             success: true,
             donations: donations.map(d => {
-                const donorName = d.donor?.name || d.donor?.username || d.donor?.email || 'Anonymous';
+                const donorName = publicDonorName(d.donor);
                 return {
                     _id: d._id,
                     id: d._id.toString(),
@@ -209,8 +225,8 @@ export const verifyDonation = async (req, res) => {
             });
         }
 
-        const { session_id } = req.query;
-        
+        const session_id = typeof req.query.session_id === 'string' ? req.query.session_id : '';
+
         if (!session_id) {
             return res.status(400).json({ 
                 success: false, 
@@ -239,20 +255,13 @@ export const verifyDonation = async (req, res) => {
             });
         }
 
-        // Check payment status
-        if (session.payment_status === 'paid') {
-            // Update donation status if not already completed
-            if (donation.status !== 'completed') {
-                donation.status = 'completed';
-                await donation.save();
-                
-                // Update campaign raised amount & donor count (align with webhook)
-                await Campaign.findByIdAndUpdate(
-                    donation.campaign._id,
-                    { $inc: { raisedAmount: donation.amount, donorCount: 1 } }
-                );
-                await notifyCampaignGoalReachedIfNeeded(donation.campaign._id);
-            }
+        // Check payment status (atomic, so this and the webhook never both count it)
+        if (session.payment_status === 'paid' && donation.status !== 'completed') {
+            const completed = await completeDonationOnce(session_id, {
+                stripePaymentIntentId: session.payment_intent,
+            });
+            donation.status = 'completed';
+            if (completed) logger.info(`✅ Donation completed via verify | ID: ${completed._id}`);
         }
 
         res.json({
@@ -260,7 +269,7 @@ export const verifyDonation = async (req, res) => {
             donation: {
                 _id: donation._id,
                 amount: donation.amount,
-                campaignTitle: donation.campaign.title,
+                campaignTitle: donation.campaign?.title || 'Campaign',
                 status: donation.status,
                 timestamp: donation.timestamp,
                 paymentStatus: session.payment_status,

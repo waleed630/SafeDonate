@@ -3,12 +3,13 @@ import express from 'express';
 const router = express.Router();
 
 import { createDonationSession, getDonationHistory, getRecentDonations, getAllDonations, verifyDonation } from '../controllers/donationController.js';
-import protect from '../middleware/authMiddleware.js';
+import protect, { optionalAuth } from '../middleware/authMiddleware.js';
 import restrictTo from '../middleware/role.js';
 
 // Public live donations feed
 router.get('/live', getRecentDonations);
-router.post('/donate', createDonationSession);
+// Guests may donate; when a donor is logged in the donation is linked to their account
+router.post('/donate', optionalAuth, createDonationSession);
 router.get('/verify', verifyDonation);
 
 // Protected routes

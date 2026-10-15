@@ -24,6 +24,16 @@ export const getUserDonationHistory = async (req, res) => {
 // 2. Campaign-level Tracking (All donations for a campaign)
 export const getCampaignDonations = async (req, res) => {
   try {
+    // Full donor list (with emails) is only for the campaign owner and admins
+    const campaign = await Campaign.findById(req.params.campaignId).select('fundraiser');
+    if (!campaign) {
+      return res.status(404).json({ success: false, message: 'Campaign not found' });
+    }
+    const isOwner = String(campaign.fundraiser) === String(req.user._id);
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
     const donations = await Donation.find({ campaign: req.params.campaignId })
       .populate('donor', 'username email')
       .sort({ timestamp: -1 });
@@ -31,7 +41,9 @@ export const getCampaignDonations = async (req, res) => {
     res.json({
       success: true,
       count: donations.length,
-      totalRaised: donations.reduce((sum, d) => sum + d.amount, 0),
+      totalRaised: donations
+        .filter((d) => d.status === 'completed')
+        .reduce((sum, d) => sum + d.amount, 0),
       donations,
     });
   } catch (err) {
@@ -48,8 +60,10 @@ export const getDonationReceipt = async (req, res) => {
 
     if (!donation) return res.status(404).json({ success: false, message: 'Donation not found' });
 
-    // Only donor or admin can view receipt
-    if (donation.donor.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
+    // Only donor or admin can view receipt. `donor` is populated, so compare its _id
+    // (guest donations have no donor at all).
+    const donorId = donation.donor?._id?.toString();
+    if (donorId !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
@@ -60,8 +74,8 @@ export const getDonationReceipt = async (req, res) => {
         timestamp: donation.timestamp,
         amount: donation.amount,
         status: donation.status,
-        campaignTitle: donation.campaign.title,
-        donorName: donation.donor.username,
+        campaignTitle: donation.campaign?.title || 'Campaign',
+        donorName: donation.donor?.username || 'Guest',
         stripeReceiptUrl: donation.receiptUrl,   // Direct link to Stripe receipt
         paymentIntentId: donation.stripePaymentIntentId,
       }
