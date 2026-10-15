@@ -68,7 +68,8 @@ const registerUser = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                profilePicture: user.profilePicture
+                profilePicture: user.profilePicture,
+                isDemo: Boolean(user.isDemo)
             }
         });
     } catch (e) {
@@ -148,7 +149,8 @@ const loginUser = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                profilePicture: user.profilePicture
+                profilePicture: user.profilePicture,
+                isDemo: Boolean(user.isDemo)
             }
         };
 
@@ -191,7 +193,8 @@ const refreshTokenUser = async (req, res) => {
                 username: user.username,
                 email: user.email,
                 role: user.role,
-                profilePicture: user.profilePicture
+                profilePicture: user.profilePicture,
+                isDemo: Boolean(user.isDemo)
             }
         });
     } catch (e) {

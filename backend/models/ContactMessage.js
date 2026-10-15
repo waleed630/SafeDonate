@@ -12,6 +12,8 @@ const contactMessageSchema = new mongoose.Schema(
       default: "unread",
       index: true,
     },
+    /** Sample message created by the demo seed (removed on every demo reset) */
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

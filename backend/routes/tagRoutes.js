@@ -11,6 +11,7 @@ import {
 
 import protect from '../middleware/authMiddleware.js';
 import restrictTo from '../middleware/role.js';
+import { blockDemo } from '../middleware/demo.js';
 
 // Public route - get all tags
 router.get('/', getAllTags);
@@ -20,6 +21,6 @@ router.use(protect, restrictTo('admin'));
 
 router.post('/', createTag);
 router.put('/:id', updateTag);
-router.delete('/:id', deleteTag);
+router.delete('/:id', blockDemo, deleteTag);
 
 export default router;

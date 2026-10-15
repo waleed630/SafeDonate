@@ -45,6 +45,7 @@ export const submitContact = asyncHandler(async (req, res) => {
   });
 });
 
+// Demo admins get masked emails here via the maskEmailsForDemo middleware
 export const listContactMessages = asyncHandler(async (_req, res) => {
   const messages = await ContactMessage.find()
     .sort({ createdAt: -1 })

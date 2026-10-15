@@ -12,6 +12,7 @@ import {
 
 import protect from '../middleware/authMiddleware.js';
 import restrictTo from '../middleware/role.js';
+import { blockDemo } from '../middleware/demo.js';
 
 // Public route - get all categories
 router.get('/', getAllCategories);
@@ -21,8 +22,8 @@ router.use(protect, restrictTo('admin'));
 
 router.post('/', createCategory);
 // Static suffix before generic /:id so paths like .../toggle-status are never treated as an id
-router.post('/:id/toggle-status', toggleCategoryStatus);
+router.post('/:id/toggle-status', blockDemo, toggleCategoryStatus);
 router.put('/:id', updateCategory);
-router.delete('/:id', deleteCategory);
+router.delete('/:id', blockDemo, deleteCategory);
 
 export default router;

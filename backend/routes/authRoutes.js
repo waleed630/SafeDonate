@@ -14,12 +14,56 @@ import { getFrontendUrl } from "../utils/getFrontendUrl.js";
 import nodemailer from "nodemailer";
 import logger from "../utils/logger.js";
 import { authLimiter, loginLimiter } from "../middleware/rateLimiter.js";
+import { isDemoModeEnabled } from "../middleware/demo.js";
+import { resetDemoData } from "../services/demoData.js";
 
 // ====================== PUBLIC ROUTES ======================
 router.post("/register", authLimiter, registerUser);
 router.post("/login", loginLimiter, loginUser);
 router.post("/logout", logoutUser);
 router.post("/refresh-token", refreshTokenUser);
+
+// ====================== PORTFOLIO DEMO ======================
+const DEMO_ROLES = ["admin", "fundraiser", "donor"];
+
+router.get("/demo", (req, res) => {
+    res.json({ success: true, enabled: isDemoModeEnabled() });
+});
+
+// One-click login into a shared demo account (only when DEMO_MODE=true)
+router.post("/demo-login", authLimiter, async (req, res) => {
+    if (!isDemoModeEnabled()) {
+        return res.status(404).json({ success: false, message: "Demo mode is not enabled" });
+    }
+    const role = req.body?.role;
+    if (!DEMO_ROLES.includes(role)) {
+        return res.status(400).json({ success: false, message: "Role must be admin, fundraiser or donor" });
+    }
+
+    try {
+        let user = await User.findOne({ isDemo: true, role });
+        if (!user) {
+            await resetDemoData();
+            user = await User.findOne({ isDemo: true, role });
+        }
+
+        await generateToken(user, res);
+        res.json({
+            success: true,
+            user: {
+                userId: String(user._id),
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                profilePicture: user.profilePicture,
+                isDemo: true,
+            },
+        });
+    } catch (error) {
+        logger.error("Demo login error: %s", error.message);
+        res.status(500).json({ success: false, message: "Server error" });
+    }
+});
 
 // ====================== GOOGLE OAUTH ======================
 const OAUTH_ROLES = ["donor", "fundraiser"];
@@ -77,7 +121,7 @@ router.get("/me", protect, async (req, res) => {
     try {
         // Get full user data including profilePicture
         const user = await User.findById(req.user.id).select(
-            '_id username name email role profilePicture completedCampaignsCount completedCampaignDonorsTotal',
+            '_id username name email role profilePicture isDemo completedCampaignsCount completedCampaignDonorsTotal',
         );
         res.json({
             success: true,

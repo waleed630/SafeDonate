@@ -1,6 +1,7 @@
 import express from 'express';
 import protect, { optionalAuth } from '../middleware/authMiddleware.js';
 import restrictTo, { requireAdmin } from '../middleware/role.js';
+import { blockDemo } from '../middleware/demo.js';
 import {
   postVerify,
   searchVerifiedNgos,
@@ -28,6 +29,6 @@ router.post(
   requireAdmin,
   rejectNgoCampaignAdmin,
 );
-router.post('/admin/registry/add', protect, requireAdmin, addVerifiedNgoFromAdmin);
+router.post('/admin/registry/add', protect, requireAdmin, blockDemo, addVerifiedNgoFromAdmin);
 
 export default router;

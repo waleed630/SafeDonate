@@ -10,7 +10,8 @@
     "dev": "nodemon server.js",
     "cleanup-duplicates": "node scripts/cleanupDuplicateEmails.js",
     "drop-username-index": "node scripts/dropUsernameIndex.js",
-    "seed:ngos": "node scripts/seedVerifiedNgos.js"
+    "seed:ngos": "node scripts/seedVerifiedNgos.js",
+    "demo:reset": "node scripts/resetDemo.js"
   },
   "keywords": [],
   "author": "",

@@ -25,6 +25,7 @@ import {
 
 import protect, { optionalAuth } from '../middleware/authMiddleware.js';
 import restrictTo from '../middleware/role.js';
+import { blockDemo } from '../middleware/demo.js';
 import logger from '../utils/logger.js';
 
 // Public GET routes
@@ -64,10 +65,10 @@ router.post('/', uploadMiddleware, restrictTo('fundraiser'), createCampaign);
 router.put('/:id', uploadMiddleware, restrictTo('fundraiser'), updateCampaign);
 
 // Campaign deletion (fundraiser: own campaigns; admin: any campaign, including after approval)
-router.delete('/:id', restrictTo('fundraiser', 'admin'), deleteCampaign);
+router.delete('/:id', restrictTo('fundraiser', 'admin'), blockDemo, deleteCampaign);
 
 // Fundraiser: mark campaign complete (any progress) — archives counts then deletes campaign + donations
-router.post('/:id/complete', restrictTo('fundraiser'), completeCampaign);
+router.post('/:id/complete', restrictTo('fundraiser'), blockDemo, completeCampaign);
 
 // Campaign updates/comments
 router.post('/:id/updates', restrictTo('fundraiser'), addUpdate);

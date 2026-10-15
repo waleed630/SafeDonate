@@ -48,6 +48,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    /** Shared portfolio demo account (one-click login, destructive actions blocked) */
+    isDemo: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     passwordResetToken: String,
     passwordResetExpires: Date,
     // Stripe integration

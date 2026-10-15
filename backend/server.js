@@ -32,6 +32,8 @@ import categoryRoutes from './routes/categoryRoutes.js';
 import ngoRoutes from './routes/ngoRoutes.js';
 import contactRoutes from './routes/contactRoutes.js';
 import { stripeWebhook } from './controllers/webhookController.js';
+import { isDemoModeEnabled, maskEmailsForDemo } from './middleware/demo.js';
+import { resetDemoData } from './services/demoData.js';
 
 // ===== REQUIRED CONFIG =====
 if (!process.env.JWT_SECRET) {
@@ -111,6 +113,9 @@ app.use(session({
 // ====================== PASSPORT ======================
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Demo accounts never see other people's email addresses
+app.use(maskEmailsForDemo);
 
 // ====================== ROUTES (Phase 1 - Only Auth) ======================
 app.use("/api/auth", authRoutes);
@@ -212,6 +217,16 @@ mongoose
                 await Category.create(catData);
                 logger.info(`✅ Default category created: ${catData.label}`);
             }
+        }
+
+        // ====================== PORTFOLIO DEMO DATA ======================
+        if (isDemoModeEnabled()) {
+            const resetHours = Number(process.env.DEMO_RESET_HOURS) || 24;
+            const runReset = () =>
+                resetDemoData().catch((err) => logger.error(`[DEMO] Reset failed: ${err.message}`));
+            await runReset();
+            setInterval(runReset, resetHours * 60 * 60 * 1000);
+            logger.info(`🎭 Demo mode on - sample data resets every ${resetHours}h`);
         }
 
         server.listen(PORT, "0.0.0.0", () => {
