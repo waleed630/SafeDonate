@@ -44,11 +44,6 @@ await import("./config/passport.js");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
-// Initialize Socket.io (Clean & Professional)
-initializeSocket(io);
 // ====================== CORS ======================
 const frontendUrl = process.env.FRONTEND_URL;
 const allowedOrigins = [
@@ -60,6 +55,11 @@ const allowedOrigins = [
     "http://127.0.0.1:5173",
     frontendUrl,
 ].filter(Boolean);
+
+const io = new Server(server, {
+  cors: { origin: allowedOrigins, credentials: true }
+});
+initializeSocket(io);
 
 app.use(
     cors({

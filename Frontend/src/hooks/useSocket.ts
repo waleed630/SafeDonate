@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
+import { BACKEND_ORIGIN } from '../api/axios';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || BACKEND_ORIGIN;
 
 export function useSocket() {
   const { user } = useAuth();
@@ -16,9 +17,8 @@ export function useSocket() {
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        auth: {
-          token: localStorage.getItem('token'),
-        },
+        // The server identifies the user from the HttpOnly session cookie
+        withCredentials: true,
       });
 
       s.on('connect', () => {
@@ -28,7 +28,7 @@ export function useSocket() {
         // Register user as online when connected
         if (user?.id) {
           console.log('📱 Registering user as online:', user.id);
-          s.emit('registerOnline', { userId: user.id });
+          s.emit('registerOnline');
         }
       });
 

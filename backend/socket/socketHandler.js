@@ -1,13 +1,15 @@
 // socket/socketHandler.js
-import Message from '../models/Message.js';
-import Notification from '../models/Notification.js';
-import Campaign from '../models/Campaign.js';
-import Donation from '../models/Donation.js';
+import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
-import { sendEmailNotification } from '../services/notificationService.js';   // We'll create this
-import { notifyCampaignGoalReachedIfNeeded } from '../utils/campaignGoalNotifications.js';
-export let  onlineUsers = new Map();
+import Message from '../models/Message.js';
+import User from '../models/User.js';
+import Campaign from '../models/Campaign.js';
+
+export let onlineUsers = new Map(); // userId -> socket.id
 const campaignViewers = new Map(); // campaignId -> Set<socketId>
+let ioInstance = null;
+
+const MAX_MESSAGE_LENGTH = 2000;
 
 const emitCampaignViewerCount = (io, campaignId) => {
   const key = String(campaignId);
@@ -15,11 +17,76 @@ const emitCampaignViewerCount = (io, campaignId) => {
   io.emit("campaign:viewers:count", { campaignId: key, count });
 };
 
+const parseCookies = (header = '') =>
+  Object.fromEntries(
+    header
+      .split(';')
+      .map((part) => part.trim().split('='))
+      .filter(([key, value]) => key && value)
+      .map(([key, ...rest]) => [key, decodeURIComponent(rest.join('='))]),
+  );
+
+/**
+ * Reads the same HttpOnly accessToken cookie the REST API uses.
+ * Guests can still connect (live viewer counts, progress updates) but get no socket.user.
+ */
+const authenticateSocket = async (socket, next) => {
+  try {
+    const token =
+      parseCookies(socket.handshake.headers?.cookie).accessToken ||
+      socket.handshake.auth?.token;
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(String(decoded.userId || decoded.id)).select('_id role isActive');
+    if (user && user.isActive !== false) {
+      socket.user = { id: String(user._id), role: user.role };
+    }
+  } catch {
+    /* invalid or expired token: treat as guest */
+  }
+  next();
+};
+
+const roomFor = (a, b) => [String(a), String(b)].sort().join("-");
+
+/** Broadcast fresh totals after a real (Stripe-confirmed) donation */
+export const broadcastCampaignProgress = async (campaignId) => {
+  if (!ioInstance) return;
+  const campaign = await Campaign.findById(campaignId).select('raisedAmount goalAmount donorCount');
+  if (!campaign) return;
+  const percent = campaign.goalAmount > 0
+    ? Math.min(100, Math.round((campaign.raisedAmount / campaign.goalAmount) * 100))
+    : 0;
+  const payload = {
+    campaignId: String(campaign._id),
+    raised: campaign.raisedAmount,
+    goal: campaign.goalAmount,
+    percent,
+    donorCount: campaign.donorCount,
+  };
+  ioInstance.emit("campaign:progress", payload);
+  ioInstance.emit("progressUpdate", {
+    campaignId: payload.campaignId,
+    raisedAmount: payload.raised,
+    progress: payload.percent,
+    donorCount: payload.donorCount,
+  });
+};
+
+/** Push a saved notification to the user if they're online */
+export const pushNotificationToUser = (userId, notification) => {
+  if (!ioInstance) return;
+  const socketId = onlineUsers.get(String(userId));
+  if (socketId) ioInstance.to(socketId).emit("newNotification", notification);
+};
+
 const initializeSocket = (io) => {
-  // const onlineUsers = new Map(); // userId → socket.id
+  ioInstance = io;
+  io.use(authenticateSocket);
 
   io.on("connection", (socket) => {
-    socket.on("joinCampaignView", ({ campaignId }) => {
+    socket.on("joinCampaignView", ({ campaignId } = {}) => {
       const key = String(campaignId || "").trim();
       if (!key) return;
 
@@ -41,7 +108,7 @@ const initializeSocket = (io) => {
       emitCampaignViewerCount(io, key);
     });
 
-    socket.on("leaveCampaignView", ({ campaignId }) => {
+    socket.on("leaveCampaignView", ({ campaignId } = {}) => {
       const key = String(campaignId || socket.currentCampaignView || "").trim();
       if (!key) return;
       const viewers = campaignViewers.get(key);
@@ -57,150 +124,86 @@ const initializeSocket = (io) => {
       emitCampaignViewerCount(io, key);
     });
 
-    console.log(`🔌 User connected: ${socket.id}`);
-
     // ==================== ONLINE USERS TRACKING ====================
-    socket.on("registerOnline", (data) => {
-      // Parse if data is a string (from Postman's Socket.io tester)
-      let parsedData = typeof data === 'string' ? JSON.parse(data) : data;
-      const userId = parsedData?.data?.userId || parsedData?.userId;
-      
-      if (!userId) {
-        console.warn("⚠️  registerOnline event received without userId. Data:", data);
-        return;
-      }
-      onlineUsers.set(userId.toString(), socket.id);
+    // The user id always comes from the verified cookie, never from the client payload
+    socket.on("registerOnline", () => {
+      if (!socket.user) return;
+      onlineUsers.set(socket.user.id, socket.id);
       io.emit("onlineUsersUpdate", Array.from(onlineUsers.keys()));
-      console.log("✅ User registered online:", userId);
     });
+    if (socket.user) {
+      onlineUsers.set(socket.user.id, socket.id);
+    }
 
-    // ==================== CHAT SYSTEM (Existing - Kept 100%) ====================
-    socket.on("joinChat", ({ userId, otherUserId }) => {
-      const room = [userId, otherUserId].sort().join("-");
+    // ==================== CHAT SYSTEM ====================
+    socket.on("joinChat", ({ otherUserId } = {}) => {
+      if (!socket.user || !mongoose.Types.ObjectId.isValid(otherUserId)) return;
+      const room = roomFor(socket.user.id, otherUserId);
       socket.join(room);
       socket.currentRoom = room;
     });
 
-    socket.on("sendMessage", async (data, callback) => {
+    socket.on("sendMessage", async (data = {}, callback) => {
+      const reply = typeof callback === "function" ? callback : () => {};
       try {
-        const { from, to, message, campaignId } = data;
-        
-        console.log("📨 Received message:", { from, to, message, campaignId });
-
-        // Validate required fields
-        if (!from || !to || !message) {
-          console.error("❌ Missing required fields:", { from, to, message });
-          if (callback) {
-            callback({ success: false, message: "Missing required fields" });
-          }
-          return;
+        if (!socket.user) {
+          return reply({ success: false, message: "Please log in to send messages" });
         }
 
-        // Convert string IDs to MongoDB ObjectIds
-        let fromId, toId;
-        try {
-          fromId = mongoose.Types.ObjectId.isValid(from) ? new mongoose.Types.ObjectId(from) : from;
-          toId = mongoose.Types.ObjectId.isValid(to) ? new mongoose.Types.ObjectId(to) : to;
-        } catch (err) {
-          console.error("❌ Invalid user ID format:", err);
-          if (callback) {
-            callback({ success: false, message: "Invalid user ID format" });
-          }
-          return;
+        const { to, campaignId } = data;
+        const text = typeof data.message === "string" ? data.message.trim() : "";
+
+        if (!to || !text) {
+          return reply({ success: false, message: "Missing required fields" });
+        }
+        if (!mongoose.Types.ObjectId.isValid(to) || to === socket.user.id) {
+          return reply({ success: false, message: "Invalid recipient" });
+        }
+        if (text.length > MAX_MESSAGE_LENGTH) {
+          return reply({ success: false, message: `Message is too long (max ${MAX_MESSAGE_LENGTH} characters)` });
         }
 
-        // Create room name from sorted string IDs (not ObjectIds)
-        const room = [from.toString(), to.toString()].sort().join("-");
-        console.log("💬 Room:", room);
+        const recipientExists = await User.exists({ _id: to });
+        if (!recipientExists) {
+          return reply({ success: false, message: "Recipient not found" });
+        }
 
-        const newMessage = new Message({ 
-          from: fromId, 
-          to: toId, 
-          message: message.trim(), 
-          campaignId: campaignId ? new mongoose.Types.ObjectId(campaignId) : null,
-          readBy: [fromId] 
+        const fromId = new mongoose.Types.ObjectId(socket.user.id);
+        const newMessage = new Message({
+          from: fromId,
+          to: new mongoose.Types.ObjectId(to),
+          message: text,
+          campaignId: mongoose.Types.ObjectId.isValid(campaignId) ? new mongoose.Types.ObjectId(campaignId) : null,
+          readBy: [fromId],
         });
 
         const savedMessage = await newMessage.save();
-        console.log("✅ Message saved:", savedMessage._id);
+        const populatedMessage = await savedMessage.populate('from', 'username profilePicture');
+        await populatedMessage.populate('to', 'username profilePicture');
 
-        // Populate user details before emitting
-        const populatedMessage = await savedMessage.populate('from', 'username email profilePicture');
-        await populatedMessage.populate('to', 'username email profilePicture');
-
-        // Emit the message to both users in the room
+        const room = roomFor(socket.user.id, to);
         io.to(room).emit("receiveMessage", populatedMessage);
 
-        // Send success callback to the sender
-        if (callback) {
-          callback({ success: true, message: "Message sent successfully", messageId: savedMessage._id });
+        // Recipient may not have this chat open; deliver to their personal socket as well
+        const recipientSocket = onlineUsers.get(String(to));
+        if (recipientSocket && !io.sockets.adapter.rooms.get(room)?.has(recipientSocket)) {
+          io.to(recipientSocket).emit("receiveMessage", populatedMessage);
         }
+
+        reply({ success: true, message: "Message sent successfully", messageId: savedMessage._id });
       } catch (error) {
-        console.error("❌ Error sending message:", error);
-        if (callback) {
-          callback({ success: false, message: "Failed to send message: " + error.message });
-        }
+        console.error("❌ Error sending message:", error.message);
+        reply({ success: false, message: "Failed to send message" });
       }
     });
 
-    socket.on("typing", ({ from, to }) => {
-      const room = [from, to].sort().join("-");
-      socket.to(room).emit("userTyping", { from });
+    socket.on("typing", ({ to } = {}) => {
+      if (!socket.user || !to) return;
+      socket.to(roomFor(socket.user.id, to)).emit("userTyping", { from: socket.user.id });
     });
 
-    // ==================== REAL-TIME DONATION UPDATES (Existing - Kept) ====================
-    socket.on("newDonation", async (data) => {
-      const { campaignId, amount, donorId } = data;
-
-      const campaign = await Campaign.findById(campaignId);
-      if (campaign) {
-        campaign.raisedAmount += amount;
-        campaign.donorCount += 1;
-        await campaign.save();
-        await notifyCampaignGoalReachedIfNeeded(campaign._id);
-
-        // Broadcast instant progress bar update to everyone
-        io.emit("progressUpdate", {
-          campaignId,
-          raisedAmount: campaign.raisedAmount,
-          progress: campaign.progress,
-          donorCount: campaign.donorCount
-        });
-
-        // Send notification to fundraiser
-        const notification = new Notification({
-          user: campaign.fundraiser,
-          type: 'donation',
-          title: 'New Donation Received!',
-          message: `Someone just donated $${amount}`,
-          campaign: campaignId,
-        });
-        await notification.save();
-
-        const socketId = onlineUsers.get(campaign.fundraiser.toString());
-        if (socketId) io.to(socketId).emit("newNotification", notification);
-      }
-    });
-
-    // ==================== NEW: FEATURE 9 - ENGAGEMENT & COMMUNICATION ====================
-    socket.on("sendNotification", async (data) => {
-      const { userId, title, message, type, campaignId } = data;
-
-      const notification = new Notification({
-        user: userId,
-        type,
-        title,
-        message,
-        campaign: campaignId,
-      });
-      await notification.save();
-
-      // Real-time push to online user
-      const socketId = onlineUsers.get(userId.toString());
-      if (socketId) {
-        io.to(socketId).emit("newNotification", notification);
-      }
-    });
+    // Donation totals and notifications are only changed by the server
+    // (Stripe webhook / verification), never by client socket events.
 
     socket.on("disconnect", () => {
       if (socket.currentCampaignView) {
