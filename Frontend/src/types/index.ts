@@ -6,6 +6,8 @@ export interface User {
   name: string;
   role: UserRole;
   avatar?: string;
+  /** Shared portfolio demo account */
+  isDemo?: boolean;
 }
 
 export interface AuthState {

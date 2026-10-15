@@ -96,6 +96,7 @@ const refreshSession = async (): Promise<boolean> => {
       name: userData.username || userData.name,
       role: userData.role,
       avatar: userData.profilePicture,
+      isDemo: Boolean(userData.isDemo),
     };
     localStorage.setItem('safedonate_user', JSON.stringify(user));
   }

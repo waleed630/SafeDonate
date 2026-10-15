@@ -11,6 +11,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   /** Reads the logged-in user from the session cookie (used after Google login) */
   loadCurrentUser: () => Promise<User>;
+  /** One-click sign-in to a shared portfolio demo account */
+  demoLogin: (role: UserRole) => Promise<User>;
   setUser: (user: User | null) => void;
   updateUser: (user: User | any) => void;
   dismissSessionExpired: () => void;
@@ -42,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             name: String(u.username ?? u.name ?? ''),
             role: u.role as UserRole,
             avatar: (u.profilePicture as string) || undefined,
+            isDemo: Boolean(u.isDemo),
           };
           setUser(updatedUser);
           localStorage.setItem('safedonate_user', JSON.stringify(updatedUser));
@@ -74,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: data.user.username || data.user.name || '',
         role: data.user.role,
         avatar: data.user.profilePicture || undefined,
+        isDemo: Boolean(data.user.isDemo),
       };
 
       setUser(u);
@@ -111,6 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: data.user.username || data.user.name || '',
         role: data.user.role,
         avatar: data.user.profilePicture || undefined,
+        isDemo: Boolean(data.user.isDemo),
       };
 
       setUser(u);
@@ -138,6 +143,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: data.user.username || data.user.name || '',
       role: data.user.role,
       avatar: data.user.profilePicture || undefined,
+      isDemo: Boolean(data.user.isDemo),
+    };
+    setUser(u);
+    localStorage.setItem('safedonate_user', JSON.stringify(u));
+    return u;
+  }, []);
+
+  const demoLogin = useCallback(async (role: UserRole) => {
+    const { data } = await api.post('/auth/demo-login', { role });
+    if (!data?.user) throw new Error(data?.message || 'Demo login failed');
+    const u: User = {
+      id: String(data.user.userId),
+      email: data.user.email,
+      name: data.user.username || '',
+      role: data.user.role,
+      avatar: data.user.profilePicture || undefined,
+      isDemo: true,
     };
     setUser(u);
     localStorage.setItem('safedonate_user', JSON.stringify(u));
@@ -169,6 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: updatedUser.username || updatedUser.name || '',
       role: updatedUser.role,
       avatar: updatedUser.profilePicture || updatedUser.avatar || undefined,
+      isDemo: Boolean(updatedUser.isDemo),
     };
     setUser(u);
     localStorage.setItem('safedonate_user', JSON.stringify(u));
@@ -183,6 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         logout,
         loadCurrentUser,
+        demoLogin,
         setUser,
         updateUser,
         dismissSessionExpired,

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/Dialog';
 import type { UserRole } from '../types';
 import { API_BASE_URL } from '../api/axios';
+import { DemoAccess } from '../components/DemoAccess';
 
 const dashboardFor = (role: string) => {
   if (role === 'admin') return '/admin/dashboard';
@@ -132,6 +133,7 @@ export function LoginRegister() {
         </div>
 
         <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 py-12 max-w-2xl mx-auto w-full">
+          <DemoAccess />
           <div className="mb-10">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-3xl font-serif font-bold text-slate-900">
