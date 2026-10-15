@@ -23,7 +23,6 @@ import donationTrackingRoutes from './routes/donationTrackingRoutes.js';
 import initializeSocket from "./socket/socketHandler.js";
 import notificationRoutes from './routes/notificationRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
-import testRoutes from './routes/testRoutes.js';
 import verificationRoutes from './routes/verificationRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import paymentMethodRoutes from './routes/paymentMethodRoutes.js';
@@ -92,9 +91,9 @@ app.post(
     stripeWebhook
 );
 
-// ✅ Increase payload limit to 50MB for image uploads
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+// Images are uploaded as multipart (multer, 5MB per file), so JSON bodies can stay small
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 app.use(morganMiddleware);
 
 // ====================== SESSION (REQUIRED FOR OAUTH) ======================
@@ -123,7 +122,6 @@ app.use('/api/donations', donationRoutes);
 app.use("/api/notifications", notificationRoutes);
 // analytics
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/test', testRoutes);
 // Verification Module
 app.use('/api/verification', verificationRoutes);
 app.use("/api/users", userRoutes); // For user-related routes (like online users)
@@ -141,27 +139,6 @@ app.get("/", (req, res) => {
         timestamp: new Date().toISOString(),
         env: process.env.NODE_ENV || "development",
     });
-});
-
-// ====================== STRIPE CHECKOUT SUCCESS ROUTE ======================
-// Stripe will redirect here after a successful checkout if your `success_url` points to this path.
-app.get("/donation/success", async (req, res) => {
-    const sessionId = req.query.session_id;
-
-    res.send(`
-        <html>
-          <head>
-            <meta charset="utf-8" />
-            <title>Donation Success</title>
-          </head>
-          <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 2rem;">
-            <h1>Donation Successful 🎉</h1>
-            <p>Your payment was successful. You can safely close this window or return to the app.</p>
-            <p><strong>Checkout Session:</strong> ${sessionId || "(missing session_id)"}</p>
-            <p><a href="/">Back to API root</a></p>
-          </body>
-        </html>
-    `);
 });
 
 // ====================== ERROR HANDLING ======================

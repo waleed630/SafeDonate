@@ -1,6 +1,7 @@
 // controllers/userController.js
 import { onlineUsers } from '../socket/socketHandler.js';
 import User from '../models/User.js';
+import { escapeRegex } from '../services/ngoVerificationService.js';
 
 const getOnlineUsers = async (req, res) => {
   try {
@@ -24,9 +25,6 @@ const uploadProfilePicture = async (req, res) => {
       });
     }
 
-    console.log('File object keys:', Object.keys(req.file));
-    console.log('Full file object:', JSON.stringify(req.file, null, 2));
-
     // Try multiple ways to get the Cloudinary URL
     let profilePictureUrl = 
       req.file.path || 
@@ -39,14 +37,6 @@ const uploadProfilePicture = async (req, res) => {
       const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
       profilePictureUrl = `https://res.cloudinary.com/${cloudinaryCloudName}/image/upload/${req.file.public_id}`;
     }
-
-    console.log('Profile picture upload:', {
-      userId,
-      fileName: req.file.originalname,
-      url: profilePictureUrl?.substring(0, 100),
-      size: req.file.size,
-      publicId: req.file.public_id || req.file.filename
-    });
 
     if (!profilePictureUrl) {
       throw new Error('Could not determine Cloudinary URL for uploaded file');
@@ -66,8 +56,6 @@ const uploadProfilePicture = async (req, res) => {
       });
     }
 
-    console.log('Profile picture updated for user:', userId);
-
     res.json({
       success: true,
       message: "Profile picture uploaded successfully",
@@ -79,7 +67,6 @@ const uploadProfilePicture = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error while uploading profile picture",
-      error: err.message
     });
   }
 };
@@ -89,13 +76,6 @@ const updateProfile = async (req, res) => {
   try {
     const { name, profilePicture } = req.body;
     const userId = req.user._id;
-
-    console.log('Profile update request:', {
-      userId,
-      name,
-      hasPicture: !!profilePicture,
-      pictureSize: profilePicture ? profilePicture.length : 0
-    });
 
     // Validate input
     if (!name || name.trim().length === 0) {
@@ -110,25 +90,24 @@ const updateProfile = async (req, res) => {
       name: name.trim(),
     };
 
-    // Only add profilePicture if provided
+    // Only add profilePicture if provided. Uploads go through /profile-picture,
+    // so here we only accept a normal image URL (no huge base64 blobs or javascript: links).
     if (profilePicture) {
+      if (typeof profilePicture !== 'string' || profilePicture.length > 2048 || !/^https?:\/\//i.test(profilePicture)) {
+        return res.status(400).json({ success: false, message: "Profile picture must be an image URL" });
+      }
       updateData.profilePicture = profilePicture;
     }
 
-    console.log('Update data keys:', Object.keys(updateData));
+    if (name.trim().length > 100) {
+      return res.status(400).json({ success: false, message: "Name is too long" });
+    }
 
     const user = await User.findByIdAndUpdate(
       userId,
       updateData,
       { returnDocument: 'after', runValidators: true }
     ).select('-password');
-
-    console.log('User after update:', {
-      userId: user?._id,
-      name: user?.name,
-      hasPicture: !!user?.profilePicture,
-      pictureSize: user?.profilePicture ? user.profilePicture.length : 0
-    });
 
     if (!user) {
       return res.status(404).json({ 
@@ -147,7 +126,6 @@ const updateProfile = async (req, res) => {
     res.status(500).json({ 
       success: false, 
       message: "Server error while updating profile",
-      error: err.message 
     });
   }
 };
@@ -174,8 +152,8 @@ const getAllUsers = async (req, res) => {
     // Filter by search term (name or email)
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
+        { name: { $regex: escapeRegex(String(search)), $options: 'i' } },
+        { email: { $regex: escapeRegex(String(search)), $options: 'i' } },
       ];
     }
 

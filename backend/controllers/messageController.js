@@ -1,4 +1,5 @@
 // controllers/messageController.js
+import mongoose from 'mongoose';
 import Message from '../models/Message.js';
 import logger from '../utils/logger.js';
 
@@ -6,7 +7,6 @@ import logger from '../utils/logger.js';
 export const getConversations = async (req, res) => {
   try {
     const userId = req.user._id;
-    console.log("📋 Fetching conversations for user:", userId);
 
     // Get all unique users the current user has conversations with
     const messages = await Message.find({
@@ -15,46 +15,42 @@ export const getConversations = async (req, res) => {
         { to: userId }
       ]
     })
-    .populate('from', 'username email profilePicture')
-    .populate('to', 'username email profilePicture')
+    .populate('from', 'username profilePicture')
+    .populate('to', 'username profilePicture')
     .sort({ createdAt: -1 });
-
-    console.log("📧 Found messages:", messages.length);
 
     // Group by conversation (unique participants)
     const conversationsMap = new Map();
 
     messages.forEach((msg) => {
       // Skip messages where user references are missing (deleted users)
-      if (!msg.from || !msg.to) {
-        console.warn("⚠️  Skipping message with null user reference:", msg._id);
-        return;
-      }
+      if (!msg.from || !msg.to) return;
 
       const otherUserId = msg.from._id.toString() === userId.toString() ? msg.to._id : msg.from._id;
       const otherUser = msg.from._id.toString() === userId.toString() ? msg.to : msg.from;
-      
-      if (!conversationsMap.has(otherUserId.toString())) {
-        const unread = !msg.readBy.some(id => id.toString() === userId.toString()) && msg.to._id.toString() === userId.toString() ? 1 : 0;
-        conversationsMap.set(otherUserId.toString(), {
-          otherUserId: otherUserId.toString(),
-          name: otherUser.username || otherUser.email || 'Unknown',
-          email: otherUser.email,
+      const key = otherUserId.toString();
+      const isUnread =
+        msg.to._id.toString() === userId.toString() &&
+        !msg.readBy.some(id => id.toString() === userId.toString());
+
+      if (!conversationsMap.has(key)) {
+        conversationsMap.set(key, {
+          otherUserId: key,
+          name: otherUser.username || 'Unknown',
           avatar: otherUser.profilePicture,
           lastMessage: msg.message,
           lastMessageTime: msg.createdAt,
-          unread: unread,
+          unread: 0,
         });
       }
+      if (isUnread) conversationsMap.get(key).unread += 1;
     });
 
     const conversations = Array.from(conversationsMap.values());
-    console.log("✅ Returning conversations:", conversations.length);
     res.json({ success: true, conversations });
   } catch (err) {
     logger.error('Get conversations error:', err);
-    console.error("❌ Error details:", err.message);
-    res.status(500).json({ success: false, message: "Server error: " + err.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -63,7 +59,9 @@ export const getChatHistory = async (req, res) => {
     const { otherUserId } = req.params;
     const userId = req.user._id;
 
-    console.log("💬 Fetching chat history between:", userId, "and", otherUserId);
+    if (!mongoose.Types.ObjectId.isValid(otherUserId)) {
+      return res.status(400).json({ success: false, message: "Invalid user id" });
+    }
 
     const messages = await Message.find({
       $or: [
@@ -75,22 +73,18 @@ export const getChatHistory = async (req, res) => {
     .populate('from', 'username profilePicture')
     .populate('to', 'username profilePicture');
 
-    console.log("📬 Found messages:", messages.length);
+    // Opening a chat marks the messages sent to me as read
+    await Message.updateMany(
+      { from: otherUserId, to: userId, readBy: { $ne: userId } },
+      { $addToSet: { readBy: userId } }
+    );
 
-    // Filter out messages with null user references
-    const validMessages = messages.filter((msg) => {
-      if (!msg.from || !msg.to) {
-        console.warn("⚠️  Skipping message with null user reference:", msg._id);
-        return false;
-      }
-      return true;
-    });
+    // Filter out messages with null user references (deleted users)
+    const validMessages = messages.filter((msg) => msg.from && msg.to);
 
-    console.log("✅ Returning valid messages:", validMessages.length);
     res.json({ success: true, messages: validMessages });
   } catch (err) {
     logger.error('Get chat history error:', err);
-    console.error("❌ Error details:", err.message);
-    res.status(500).json({ success: false, message: "Server error: " + err.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };

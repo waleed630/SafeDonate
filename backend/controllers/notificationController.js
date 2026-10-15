@@ -1,4 +1,5 @@
 // controllers/notificationController.js
+import mongoose from 'mongoose';
 import Notification from '../models/Notification.js';
 import { sendEmailNotification } from '../services/notificationService.js';
 
@@ -10,9 +11,12 @@ const getUserNotifications = async (req, res) => {
   res.json({ success: true, notifications });
 };
 
- const markAsRead = async (req, res) => {
+const markAsRead = async (req, res) => {
+  const ids = Array.isArray(req.body?.notificationIds)
+    ? req.body.notificationIds.filter((id) => mongoose.Types.ObjectId.isValid(id))
+    : [];
   await Notification.updateMany(
-    { user: req.user._id, _id: { $in: req.body.notificationIds || [] } },
+    { user: req.user._id, _id: { $in: ids } },
     { read: true }
   );
   res.json({ success: true });
@@ -49,7 +53,7 @@ const sendEmail = async (req, res) => {
       message: `Email sent successfully to ${email}` 
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: "Failed to send email" });
   }
 };
 export  { getUserNotifications, markAsRead, sendEmail };

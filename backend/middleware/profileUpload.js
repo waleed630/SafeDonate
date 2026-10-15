@@ -69,44 +69,7 @@ const profileUploadMiddleware = (req, res, next) => {
             });
         }
         
-        // Log successful file upload for debugging
         if (req.file) {
-            console.log('[PROFILE UPLOAD] File object received:');
-            console.log('File keys:', Object.keys(req.file));
-            console.log('File details:', {
-                fieldname: req.file.fieldname,
-                originalname: req.file.originalname,
-                encoding: req.file.encoding,
-                mimetype: req.file.mimetype,
-                size: req.file.size,
-                bucket: req.file.bucket,
-                acl: req.file.acl,
-                contentType: req.file.contentType,
-                contentDisposition: req.file.contentDisposition,
-                storageClass: req.file.storageClass,
-                serverSideEncryption: req.file.serverSideEncryption,
-                metadata: req.file.metadata,
-                location: req.file.location,
-                etag: req.file.etag,
-                path: req.file.path,
-                secure_url: req.file.secure_url,
-                url: req.file.url,
-                public_id: req.file.public_id,
-                version: req.file.version,
-                signature: req.file.signature,
-                width: req.file.width,
-                height: req.file.height,
-                format: req.file.format,
-                resource_type: req.file.resource_type,
-                created_at: req.file.created_at,
-                tags: req.file.tags,
-                bytes: req.file.bytes,
-                type: req.file.type,
-                etag2: req.file.etag,
-                placeholder: req.file.placeholder,
-                eager: req.file.eager,
-                responsive_breakpoints: req.file.responsive_breakpoints,
-            });
             logger.info(`[PROFILE UPLOAD SUCCESS] File uploaded: ${req.file.originalname}`);
         }
         
