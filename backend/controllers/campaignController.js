@@ -7,7 +7,7 @@ import Donation from "../models/Donation.js";
 import Notification from "../models/Notification.js";
 import logger from "../utils/logger.js";
 import { createNotification } from "../services/notificationService.js";
-import { verifyOrganization } from "../services/ngoVerificationService.js";
+import { verifyOrganization, escapeRegex } from "../services/ngoVerificationService.js";
 
 const isCampaignVisibleToRequester = (campaign, user) => {
   if (!campaign?.adminPaused) return true;
@@ -27,7 +27,6 @@ export const createCampaign = async (req, res) => {
     );
 
     // ✅ ULTRA DETAILED LOGGING
-    logger.info(`[CREATE CAMPAIGN] FULL req.body:`, JSON.stringify(req.body, null, 2));
     logger.info(`[CREATE CAMPAIGN] Number of files: ${req.files ? req.files.length : 0}`);
 
     // Check if user exists
@@ -138,8 +137,8 @@ export const createCampaign = async (req, res) => {
     }
 
     // Case 2: Image URL
-    if (req.body.imageUrl) {
-      images.push(req.body.imageUrl);
+    if (typeof req.body.imageUrl === "string" && /^https?:\/\//i.test(req.body.imageUrl.trim())) {
+      images.push(req.body.imageUrl.trim());
     }
     logger.info(`[CREATE CAMPAIGN] Images uploaded: ${images.length}`);
 
@@ -188,14 +187,17 @@ export const createCampaign = async (req, res) => {
       campaign,
     });
   } catch (err) {
+    // Schema validation messages (e.g. "description too short") are safe and useful to show
+    if (err.name === "ValidationError") {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+
     logger.error(`[CREATE CAMPAIGN] Error: ${err.message || "Unknown error"}`);
     logger.error(`[CREATE CAMPAIGN] Stack: ${err.stack}`);
-    logger.error("🔥 FULL ERROR:", err); // ✅ ADD THIS
 
     res.status(500).json({
       success: false,
-      message: err.message || "Failed to create campaign",
-      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+      message: "Failed to create campaign",
     });
   }
 };
@@ -218,11 +220,13 @@ export const getCampaigns = async (req, res) => {
 
     // 1. Keyword Search (title + description + location + category) – ENHANCED
     if (search) {
+      // Escape user input so it is matched literally (no regex injection / ReDoS)
+      const safeSearch = escapeRegex(String(search));
       query.$or = [
-        { title: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-        { location: { $regex: search, $options: "i" } },
-        { category: { $regex: search, $options: "i" } },
+        { title: { $regex: safeSearch, $options: "i" } },
+        { description: { $regex: safeSearch, $options: "i" } },
+        { location: { $regex: safeSearch, $options: "i" } },
+        { category: { $regex: safeSearch, $options: "i" } },
       ];
     }
 
@@ -239,7 +243,7 @@ export const getCampaigns = async (req, res) => {
     }
 
     // 4. Filter by Location – PAST FEATURE
-    if (location) query.location = { $regex: location, $options: "i" };
+    if (location) query.location = { $regex: escapeRegex(String(location)), $options: "i" };
 
     // 4. Filter by Target Amount (Goal) – PAST FEATURE
     if (minGoal)
@@ -249,7 +253,7 @@ export const getCampaigns = async (req, res) => {
 
     // Build base query – PAST FEATURE
     let campaignsQuery = Campaign.find(query)
-      .populate("fundraiser", "username email profilePicture")
+      .populate("fundraiser", "username profilePicture")
       .select("-__v");
 
     // 5. Sort Options – PAST FEATURE
@@ -334,10 +338,19 @@ export const getCampaign = async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id).populate(
       "fundraiser",
-      "username email profilePicture",
+      "username profilePicture",
     );
     if (!campaign)
       return res.status(404).json({ success: false, message: "Campaign not found" });
+
+    // Pending/rejected campaigns are only visible to their owner and admins
+    if (!campaign.verified) {
+      const uid = req.user?._id?.toString();
+      const ownerId = campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
+      if (uid !== ownerId && req.user?.role !== "admin") {
+        return res.status(404).json({ success: false, message: "Campaign not found" });
+      }
+    }
 
     if (campaign.adminPaused) {
       const uid = req.user?._id?.toString();
@@ -356,12 +369,11 @@ export const getCampaign = async (req, res) => {
 
     res.json({ success: true, campaign });
   } catch (err) {
-    console.error('Error getting campaign:', err);
-    res.status(500).json({ 
-      success: false, 
-      message: "Server error", 
-      error: err.message 
-    });
+    if (err.name === "CastError") {
+      return res.status(404).json({ success: false, message: "Campaign not found" });
+    }
+    logger.error('Error getting campaign:', err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -390,13 +402,13 @@ export const getTopCampaignDonations = async (req, res) => {
       campaign: campaign._id,
       status: "completed",
     })
-      .populate("donor", "username name email profilePicture")
+      .populate("donor", "username name profilePicture")
       .sort({ amount: -1, timestamp: -1 })
       .limit(5);
 
     const formatted = donations.map((d) => {
       const donorName =
-        d.donor?.name || d.donor?.username || d.donor?.email || "Anonymous";
+        d.donor?.name || d.donor?.username || "Anonymous";
       return {
         _id: d._id,
         id: d._id.toString(),
@@ -443,13 +455,13 @@ export const getRecentCampaignDonations = async (req, res) => {
       campaign: campaign._id,
       status: "completed",
     })
-      .populate("donor", "username name email profilePicture")
+      .populate("donor", "username name profilePicture")
       .sort({ timestamp: -1, createdAt: -1 })
       .limit(limit);
 
     const formatted = donations.map((d) => {
       const donorName =
-        d.donor?.name || d.donor?.username || d.donor?.email || "Anonymous";
+        d.donor?.name || d.donor?.username || "Anonymous";
       return {
         _id: d._id,
         id: d._id.toString(),
@@ -474,7 +486,7 @@ export const getCampaignComments = async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id)
       .populate("fundraiser", "username email")
-      .populate("comments.user", "username name email profilePicture");
+      .populate("comments.user", "username name profilePicture");
     if (!campaign) {
       return res
         .status(404)
@@ -496,7 +508,7 @@ export const getCampaignComments = async (req, res) => {
       .map((c) => {
         const commenterId = c.user?._id?.toString?.() ?? String(c.user);
         const userName =
-          c.user?.name || c.user?.username || c.user?.email || "Anonymous";
+          c.user?.name || c.user?.username || "Anonymous";
         return {
           _id: c._id,
           id: c._id.toString(),
@@ -554,7 +566,7 @@ export const addCampaignComment = async (req, res) => {
     });
     await campaign.save();
 
-    const userName = req.user?.name || req.user?.username || req.user?.email || "Anonymous";
+    const userName = req.user?.name || req.user?.username || "Anonymous";
     const fundraiserId =
       campaign.fundraiser?._id?.toString?.() ?? String(campaign.fundraiser);
     const requesterId = req.user?._id?.toString?.() ?? "";
@@ -594,7 +606,50 @@ export const updateCampaign = async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
-    Object.assign(campaign, req.body);
+    // Only content fields are editable. Status, verification, totals and ownership
+    // are controlled by the server/admin, so they are never copied from the request.
+    const body = req.body ?? {};
+
+    if (body.title !== undefined) campaign.title = String(body.title).trim();
+    if (body.description !== undefined) campaign.description = String(body.description);
+
+    if (body.category !== undefined) {
+      const dbCategories = await Category.find({ active: true });
+      const match = dbCategories.find(
+        (c) => c.label.toLowerCase() === String(body.category).toLowerCase(),
+      );
+      if (!match) {
+        return res.status(400).json({ success: false, message: "Invalid category" });
+      }
+      campaign.category = match.label;
+    }
+
+    if (body.tags !== undefined) {
+      const requested = Array.isArray(body.tags)
+        ? body.tags
+        : String(body.tags).split(",");
+      const validLabels = (await Tag.find()).map((t) => t.label);
+      campaign.tags = requested
+        .map((t) => String(t).trim())
+        .filter((t) => validLabels.includes(t));
+    }
+
+    if (body.goalAmount !== undefined) {
+      const goal = Number(body.goalAmount);
+      if (!Number.isFinite(goal) || goal < 100) {
+        return res.status(400).json({ success: false, message: "Goal amount must be at least 100" });
+      }
+      campaign.goalAmount = goal;
+    }
+
+    if (body.endDate !== undefined) {
+      const end = new Date(body.endDate);
+      if (Number.isNaN(end.getTime())) {
+        return res.status(400).json({ success: false, message: "Invalid end date" });
+      }
+      campaign.endDate = end;
+    }
+
     if (req.files?.length) {
       campaign.images = req.files
         .map((f) => f.path || f.secure_url || f.url || '')
@@ -604,7 +659,11 @@ export const updateCampaign = async (req, res) => {
     await campaign.save();
     res.json({ success: true, campaign });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    if (err.name === "ValidationError") {
+      return res.status(400).json({ success: false, message: err.message });
+    }
+    logger.error("updateCampaign error:", err);
+    res.status(500).json({ success: false, message: "Failed to update campaign" });
   }
 };
 
@@ -727,13 +786,16 @@ export const addUpdate = async (req, res) => {
     await campaign.save();
 
     // === NEW: Feature 9 - Campaign Update Alerts ===
-    const donations = await Donation.find({ campaign: campaign._id }).populate(
-      "donor",
-    );
+    // One alert per donor who actually paid; guest donations have no donor account
+    const donorIds = await Donation.distinct("donor", {
+      campaign: campaign._id,
+      status: "completed",
+      donor: { $ne: null },
+    });
 
-    for (const donation of donations) {
+    for (const donorId of donorIds) {
       await createNotification(
-        donation.donor._id,
+        donorId,
         "campaign_update",
         "New Update from Campaign",
         `${campaign.title}: ${title}`,
@@ -743,7 +805,8 @@ export const addUpdate = async (req, res) => {
 
     res.json({ success: true, campaign });
   } catch (err) {
-    res.status(400).json({ success: false, message: err.message });
+    logger.error("addUpdate error:", err);
+    res.status(500).json({ success: false, message: "Failed to post update" });
   }
 };
 
@@ -770,7 +833,7 @@ export const getAllCampaigns = async (req, res) => {
     // Filter by search term (title or fundraiser name)
     if (search) {
       query.$or = [
-        { title: { $regex: search, $options: 'i' } },
+        { title: { $regex: escapeRegex(String(search)), $options: 'i' } },
       ];
     }
 

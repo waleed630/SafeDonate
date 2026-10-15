@@ -159,17 +159,23 @@ const verifyCampaign = async (req, res) => {
 
     if (action === "approve") {
       const fraudScore = await calculateFraudScore(campaign);
+      campaign.status = "approved";
       campaign.verified = true;
       campaign.adminPaused = false;
       campaign.fraudScore = fraudScore;
       campaign.verifiedBy = req.user._id;
       campaign.verifiedAt = new Date();
       campaign.rejectionReason = undefined;
-    } 
+    }
     else if (action === "reject") {
+      // Keep this in sync with campaignController.rejectCampaign
+      campaign.status = "rejected";
       campaign.verified = false;
+      campaign.adminPaused = false;
+      campaign.verifiedBy = req.user._id;
+      campaign.verifiedAt = new Date();
       campaign.rejectionReason = rejectionReason || "Not approved by admin";
-    } 
+    }
     else {
       return res.status(400).json({ success: false, message: "Invalid action. Use 'approve' or 'reject'" });
     }
@@ -202,6 +208,8 @@ const verifyCampaign = async (req, res) => {
         if (!campaign.fraudScore) {
           try {
             campaign.fraudScore = await calculateFraudScore(campaign);
+            // Cache the score so the AI model isn't called again on every page load
+            await Campaign.updateOne({ _id: campaign._id }, { fraudScore: campaign.fraudScore });
           } catch (err) {
             logger.warn(`Fraud score skipped for campaign ${campaign._id}:`, err?.message || err);
             campaign.fraudScore = 0;
