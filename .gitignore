@@ -5,6 +5,14 @@ node_modules/
 # Env files
 .env
 .env.*
+!.env.example
+
+# Local notes that may contain credentials
+SafeDonate Database.txt
+git-history*.txt
+
+# User uploads (served from Cloudinary)
+backend/uploads/
 
 # Build
 dist/
