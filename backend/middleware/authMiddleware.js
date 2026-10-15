@@ -36,6 +36,13 @@ const protect = async (req, res, next) => {
             });
         }
 
+        if (user.isActive === false) {
+            return res.status(403).json({
+                success: false,
+                message: "This account has been deactivated."
+            });
+        }
+
         // 5️⃣ Attach to request
         req.user = user;
         next();
@@ -71,7 +78,7 @@ export const optionalAuth = async (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         const user = await User.findById(String(decoded.userId || decoded.id)).select("-password -passwordResetToken -passwordResetExpires");
-        if (user) req.user = user;
+        if (user && user.isActive !== false) req.user = user;
     } catch {
         /* invalid/expired token — treat as anonymous */
     }

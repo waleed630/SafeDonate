@@ -11,6 +11,15 @@ function resolveApiBaseUrl(): string {
 
 const DEFAULT_API_URL = resolveApiBaseUrl();
 
+/** Base URL of the API (e.g. `/api` or `https://host/api`) for full-page redirects like Google login */
+export const API_BASE_URL = DEFAULT_API_URL.replace(/\/$/, '');
+
+/** Origin of the backend server, used by Socket.io */
+export const BACKEND_ORIGIN = (() => {
+  if (/^https?:\/\//i.test(API_BASE_URL)) return new URL(API_BASE_URL).origin;
+  return typeof window === 'undefined' ? '' : window.location.origin;
+})();
+
 function requestUrlPath(cfg: InternalAxiosRequestConfig | undefined): string {
   const u = String(cfg?.url ?? '');
   const base = String(cfg?.baseURL ?? '').replace(/\/$/, '');
@@ -107,6 +116,7 @@ const onRefreshed = (success: boolean) => {
 
 const logoutAndExpireSession = () => {
   localStorage.removeItem('safedonate_token');
+  localStorage.removeItem('safedonate_refresh_token');
   localStorage.removeItem('safedonate_user');
   window.dispatchEvent(new Event('session-expired'));
   setTimeout(() => {

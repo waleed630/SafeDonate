@@ -31,11 +31,16 @@ if (isGoogleAuthConfigured) passport.use(
         // Check if user exists by googleId
         let user = await User.findOne({ googleId: profile.id });
 
+        if (user && user.isActive === false) {
+          return done(null, false);
+        }
+
         if (!user) {
           // Check if email exists
-          const existingEmail = await User.findOne({ email: profile.emails[0].value });
-          
+          const existingEmail = await User.findOne({ email: profile.emails[0].value.toLowerCase() });
+
           if (existingEmail) {
+            if (existingEmail.isActive === false) return done(null, false);
             // Link Google ID to existing user
             existingEmail.googleId = profile.id;
             await existingEmail.save();
@@ -53,6 +58,8 @@ if (isGoogleAuthConfigured) passport.use(
             role: "donor", // Default role for Google OAuth
           });
           await user.save();
+          // Only a brand-new account may pick its role (donor/fundraiser) in the callback
+          user.$locals.isNewOAuthUser = true;
         }
 
         return done(null, user);

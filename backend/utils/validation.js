@@ -5,7 +5,8 @@ const validateRegistration = (data) => {
         username: Joi.string().min(3).max(30).required(),
         email: Joi.string().email().required(),
         password: Joi.string().min(6).required(),
-        role: Joi.string().valid('admin', 'donor', 'fundraiser').optional(),
+        // Admin accounts are never self-registered; they are seeded on the server.
+        role: Joi.string().valid('donor', 'fundraiser').optional(),
     });
     return schema.validate(data);
 };

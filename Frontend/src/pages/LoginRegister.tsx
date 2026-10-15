@@ -11,8 +11,13 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import type { UserRole } from '../types';
+import { API_BASE_URL } from '../api/axios';
 
-const BACKEND_URL = 'http://localhost:5000';
+const dashboardFor = (role: string) => {
+  if (role === 'admin') return '/admin/dashboard';
+  if (role === 'fundraiser') return '/fundraiser/dashboard';
+  return '/donor/dashboard';
+};
 
 type AuthTab = 'login' | 'register';
 type Role = UserRole;
@@ -24,7 +29,7 @@ export function LoginRegister() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeUser, setWelcomeUser] = useState('');
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
-  const { login, register, setUser } = useAuth() as any;
+  const { login, register, loadCurrentUser } = useAuth() as any;
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -32,64 +37,43 @@ export function LoginRegister() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const refresh = params.get('refresh');
-    const userRole = params.get('role');
+    const oauthStatus = params.get('oauth');
+    const oauthError = params.get('error');
+    if (!oauthStatus && !oauthError) return;
 
-    if (token && refresh) {
-      try {
-        const tokenParts = token.split('.');
-        if (tokenParts.length === 3) {
-          const decoded = JSON.parse(atob(tokenParts[1]));
-          const user = {
-            id: decoded.id || decoded.userId,
-            email: decoded.email,
-            name: decoded.username || decoded.name || '',
-            role: userRole || decoded.role || 'donor',
-            avatar: undefined,
-          };
+    window.history.replaceState({}, document.title, window.location.pathname);
 
-          localStorage.setItem('safedonate_token', token);
-          localStorage.setItem('safedonate_refresh_token', refresh);
-          localStorage.setItem('safedonate_user', JSON.stringify(user));
-          setUser(user);
-
-          // Fetch full user data including profilePicture
-          fetch('http://localhost:5000/api/auth/me', {
-            credentials: 'include',
-          })
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-              if (data?.user?.profilePicture) {
-                const fullUser = {
-                  ...user,
-                  avatar: data.user.profilePicture,
-                };
-                localStorage.setItem('safedonate_user', JSON.stringify(fullUser));
-                setUser(fullUser);
-              }
-            })
-            .catch(err => console.debug('Profile picture fetch failed:', err));
-
-          toast({
-            title: '✨ Welcome!',
-            description: `Signed in successfully as a ${user.role}.`,
-            variant: 'success',
-          });
-
-          const dest = user.role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
-          window.history.replaceState({}, document.title, window.location.pathname);
-          navigate(dest, { replace: true });
-        }
-      } catch (error) {
-        console.error('Failed to process OAuth callback:', error);
-      }
+    if (oauthError) {
+      toast({
+        title: 'Google sign-in failed',
+        description:
+          oauthError === 'oauth_unavailable'
+            ? 'Google sign-in is not available right now. Please use email and password.'
+            : 'Please try again.',
+        variant: 'destructive',
+      });
+      return;
     }
-  }, [navigate, setUser, toast]);
+
+    // The backend already set the session cookies; just load who we are
+    loadCurrentUser()
+      .then((u: { role: string }) => {
+        toast({
+          title: '✨ Welcome!',
+          description: `Signed in successfully as a ${u.role}.`,
+          variant: 'success',
+        });
+        navigate(dashboardFor(u.role), { replace: true });
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to finish Google sign-in:', error);
+        toast({ title: 'Google sign-in failed', description: 'Please try again.', variant: 'destructive' });
+      });
+  }, [navigate, loadCurrentUser, toast]);
 
   const handleGoogleLogin = () => {
     // Redirect to backend Google OAuth endpoint with selected role
-    window.location.href = `${BACKEND_URL}/api/auth/google?role=${role}`;
+    window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
   };
 
   return (
@@ -340,17 +324,19 @@ export function LoginRegister() {
                     const email = (form.querySelector('#reg-email') as HTMLInputElement)?.value;
                     const password = (form.querySelector('#reg-password') as HTMLInputElement)?.value;
                     const username = ((form.querySelector('#reg-fname') as HTMLInputElement)?.value || '') + ' ' + ((form.querySelector('#reg-lname') as HTMLInputElement)?.value || '');
-                    await register({ email, password, username, role });
-                    
+                    // Admin accounts can't sign up; the "Sign in as Admin" choice falls back to donor
+                    const signupRole = role === 'fundraiser' ? 'fundraiser' : 'donor';
+                    await register({ email, password, username, role: signupRole });
+
                     // Show success toast
                     toast({
                       title: '✨ Success!',
-                      description: `Welcome to SafeDonate! You've been registered as a ${role}.`,
+                      description: `Welcome to SafeDonate! You've been registered as a ${signupRole}.`,
                       variant: 'success',
                     });
-                    
+
                     // After register, redirect to dashboard based on role
-                    const dest = role === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
+                    const dest = dashboardFor(signupRole);
                     navigate(dest, { replace: true });
                   } catch (err: any) {
                     const errorMessage = err?.response?.data?.message || err?.message || 'Registration failed. Please try again.';

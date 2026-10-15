@@ -56,7 +56,7 @@ const registerUser = async (req, res) => {
         await user.save();
 
         // Generate tokens
-        const { accessToken, refreshToken } = await generateToken(user, res);
+        await generateToken(user, res);
 
         logger.info("User registered successfully: %s (role: %s)", user._id, user.role);
 
@@ -73,7 +73,7 @@ const registerUser = async (req, res) => {
         });
     } catch (e) {
         logger.error("Error in registration: %s", e.message);
-        res.status(500).json({ success: false, message: "Server error: " + e.message });
+        res.status(500).json({ success: false, message: "Server error" });
     }
 };
 
@@ -91,7 +91,7 @@ const loginUser = async (req, res) => {
         }
 
         const { email, password, role } = req.body;
-        const user = await User.findOne({ email });
+        const user = await User.findOne({ email: email.toLowerCase().trim() });
 
         if (!user) {
             logger.warn("Invalid credentials for email: %s", email);
@@ -127,8 +127,15 @@ const loginUser = async (req, res) => {
             });
         }
 
+        if (user.isActive === false) {
+            return res.status(403).json({
+                success: false,
+                message: "This account has been deactivated. Please contact support.",
+            });
+        }
+
         // Generate tokens
-        const { accessToken, refreshToken } = await generateToken(user, res);
+        await generateToken(user, res);
 
         logger.info("User logged in successfully: %s (role: %s)", user._id, user.role);
 
@@ -166,7 +173,8 @@ const refreshTokenUser = async (req, res) => {
         }
 
         const user = await User.findById(storedToken.user);
-        if (!user) {
+        if (!user || user.isActive === false) {
+            await RefreshToken.deleteOne({ _id: storedToken._id });
             return res.status(401).json({ success: false, message: "User not found" });
         }
 
@@ -174,7 +182,7 @@ const refreshTokenUser = async (req, res) => {
         await RefreshToken.deleteOne({ _id: storedToken._id });
 
         // Generate new tokens
-        const { accessToken, refreshToken: newRefreshToken } = await generateToken(user, res);
+        await generateToken(user, res);
 
         res.json({
             success: true,

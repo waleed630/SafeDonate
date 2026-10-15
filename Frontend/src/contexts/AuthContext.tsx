@@ -9,6 +9,8 @@ interface AuthContextType {
   login: (email: string, password: string, role?: UserRole) => Promise<void>;
   register: (payload: { email: string; password: string; username?: string; role?: UserRole }) => Promise<void>;
   logout: () => Promise<void>;
+  /** Reads the logged-in user from the session cookie (used after Google login) */
+  loadCurrentUser: () => Promise<User>;
   setUser: (user: User | null) => void;
   updateUser: (user: User | any) => void;
   dismissSessionExpired: () => void;
@@ -127,6 +129,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadCurrentUser = useCallback(async () => {
+    const { data } = await api.get('/auth/me');
+    if (!data?.user) throw new Error('Not signed in');
+    const u: User = {
+      id: String(data.user._id || data.user.id),
+      email: data.user.email,
+      name: data.user.username || data.user.name || '',
+      role: data.user.role,
+      avatar: data.user.profilePicture || undefined,
+    };
+    setUser(u);
+    localStorage.setItem('safedonate_user', JSON.stringify(u));
+    return u;
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api.post('/auth/logout');
@@ -135,6 +152,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       localStorage.removeItem('safedonate_user');
+      localStorage.removeItem('safedonate_token');
+      localStorage.removeItem('safedonate_refresh_token');
       setIsSessionExpired(false);
     }
   }, []);
@@ -163,6 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isSessionExpired,
         login,
         logout,
+        loadCurrentUser,
         setUser,
         updateUser,
         dismissSessionExpired,

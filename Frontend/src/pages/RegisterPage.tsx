@@ -14,7 +14,7 @@ import {
 } from '../components/ui/AlertDialog';
 import { useToast } from '../hooks/use-toast';
 
-const BACKEND_URL = 'http://localhost:5000';
+import { API_BASE_URL } from '../api/axios';
 
 export function RegisterPage() {
   const [role, setRole] = useState<'donor' | 'fundraiser'>('donor');
@@ -23,85 +23,25 @@ export function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
-  const { register, setUser } = useAuth() as any;
+  const { register } = useAuth() as any;
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Handle OAuth callback from URL parameters
+  // Google sign-up finishes on /login (the backend redirects there); only show errors here
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const refresh = params.get('refresh');
-    const userRole = params.get('role');
-
-    if (token && refresh) {
-      try {
-        // Decode JWT token to get user info (without verification on frontend)
-        const tokenParts = token.split('.');
-        if (tokenParts.length === 3) {
-          const decodedToken = JSON.parse(atob(tokenParts[1]));
-          
-          // Store tokens
-          localStorage.setItem('safedonate_token', token);
-          localStorage.setItem('safedonate_refresh_token', refresh);
-          
-          // Store user info
-          const user = {
-            id: decodedToken.id || decodedToken.userId,
-            email: decodedToken.email,
-            name: decodedToken.username || decodedToken.name || '',
-            role: userRole || decodedToken.role || 'donor',
-            avatar: undefined,
-          };
-          localStorage.setItem('safedonate_user', JSON.stringify(user));
-          setUser(user);
-
-          // Fetch full user data including profilePicture
-          fetch('http://localhost:5000/api/auth/me', {
-            credentials: 'include',
-          })
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-              if (data?.user?.profilePicture) {
-                const fullUser = {
-                  ...user,
-                  avatar: data.user.profilePicture,
-                };
-                localStorage.setItem('safedonate_user', JSON.stringify(fullUser));
-                setUser(fullUser);
-              }
-            })
-            .catch(err => console.debug('Profile picture fetch failed:', err));
-        }
-
-        toast({
-          title: '✨ Welcome!',
-          description: `You have successfully registered as a ${userRole}!`,
-          variant: 'success',
-        });
-
-        const dest = userRole === 'fundraiser' ? '/fundraiser/dashboard' : '/donor/dashboard';
-        navigate(dest, { replace: true });
-      } catch (error) {
-        console.error('Failed to process OAuth callback:', error);
-        setErrorDialog({
-          open: true,
-          title: 'Authentication Error',
-          message: 'Failed to process your authentication. Please try again.',
-        });
-      }
-    } else if (params.get('error') === 'oauth_failed') {
+    if (params.get('error') === 'oauth_failed') {
       setErrorDialog({
         open: true,
         title: 'OAuth Failed',
         message: 'Google authentication failed. Please try again.',
       });
     }
-  }, [navigate, toast]);
+  }, []);
 
   const handleGoogleSignup = () => {
     // Redirect to backend Google OAuth endpoint with selected role
-    window.location.href = `${BACKEND_URL}/api/auth/google?role=${role}`;
+    window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
   };
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {

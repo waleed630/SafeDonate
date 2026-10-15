@@ -7,49 +7,32 @@ import protect from "../middleware/authMiddleware.js";
 import restrictTo from "../middleware/role.js";
 import passport from "passport";
 import User from "../models/User.js";
+import RefreshToken from "../models/RefreshToken.js";
 import crypto from "crypto";
 import generateToken from "../utils/generateToken.js";   // ← Updated import path
 import { getFrontendUrl } from "../utils/getFrontendUrl.js";
 import nodemailer from "nodemailer";
-import path from "path";
-import { fileURLToPath } from "url";
-import logger from "../utils/logger.js";   
-import dotenv from "dotenv";
-
-dotenv.config();
-
-// Fix for ESM __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import logger from "../utils/logger.js";
+import { authLimiter, loginLimiter } from "../middleware/rateLimiter.js";
 
 // ====================== PUBLIC ROUTES ======================
-router.post("/register", registerUser);
-router.post("/login", loginUser);
+router.post("/register", authLimiter, registerUser);
+router.post("/login", loginLimiter, loginUser);
 router.post("/logout", logoutUser);
 router.post("/refresh-token", refreshTokenUser);
 
 // ====================== GOOGLE OAUTH ======================
+const OAUTH_ROLES = ["donor", "fundraiser"];
+
 router.get("/google", (req, res, next) => {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
         return res.redirect(`${getFrontendUrl(req)}/login?error=oauth_unavailable`);
     }
 
-    // Preserve role in session for callback
-    const role = req.query.role || "donor"; // Default to donor if not specified
-    
-    console.log("🔐 Google OAuth Initiated:");
-    console.log("  Role from query:", req.query.role);
-    console.log("  Final role:", role);
-    
-    // Ensure session exists
-    if (!req.session) {
-        console.warn("⚠️  Session not initialized!");
-        req.session = {};
-    }
-    
+    // Only donor/fundraiser can be chosen here; anything else falls back to donor
+    const role = OAUTH_ROLES.includes(req.query.role) ? req.query.role : "donor";
     req.session.oauthRole = role;
-    console.log("  ✅ Session oauthRole set to:", req.session.oauthRole);
-    
+
     // Authenticate with Google and preserve selected role via state
     passport.authenticate("google", { 
         scope: ["profile", "email"],
@@ -59,39 +42,30 @@ router.get("/google", (req, res, next) => {
 
 router.get(
     "/google/callback",
-    passport.authenticate("google", {
-        failureRedirect: process.env.FRONTEND_URL + "/login?error=oauth_failed",
-        session: true,
-    }),
+    (req, res, next) =>
+        passport.authenticate("google", {
+            failureRedirect: `${getFrontendUrl(req)}/login?error=oauth_failed`,
+            session: true,
+        })(req, res, next),
     async (req, res) => {
         try {
-            // Get role from state, session, or default to donor
-            const role = req.query.state || req.session?.oauthRole || req.user.role || "donor";
-            
-            console.log("🔍 OAuth Callback Debug:");
-            console.log("  req.query.state:", req.query.state);
-            console.log("  req.session?.oauthRole:", req.session?.oauthRole);
-            console.log("  req.user.role:", req.user.role);
-            console.log("  Final role:", role);
-            
-            // Update user role if it differs from selected role
-            if (req.user.role !== role) {
-                req.user.role = role;
-                await req.user.save();
-                console.log("  ✅ User role updated to:", role);
+            // Existing accounts keep their role. A new account may pick donor or fundraiser.
+            if (req.user.$locals?.isNewOAuthUser) {
+                const requested = req.query.state || req.session?.oauthRole;
+                if (OAUTH_ROLES.includes(requested) && req.user.role !== requested) {
+                    req.user.role = requested;
+                    await req.user.save();
+                }
             }
+            if (req.session) delete req.session.oauthRole;
 
-            // Generate tokens
-            const { accessToken, refreshToken } = await generateToken(req.user, res);
-            
-            // Redirect to login page with tokens (frontend will fetch profilePicture from /api/auth/me)
+            // Tokens go into HttpOnly cookies only, never into the URL
+            await generateToken(req.user, res);
+
             const frontendUrl = getFrontendUrl(req);
-            const redirectUrl = `${frontendUrl}/login?token=${accessToken}&refresh=${refreshToken}&role=${role}`;
-            console.log("  📍 Redirecting to:", redirectUrl);
-            res.redirect(redirectUrl);
+            res.redirect(`${frontendUrl}/login?oauth=success`);
         } catch (error) {
             logger.error("Error in Google OAuth callback: %s", error.message);
-            console.error("❌ OAuth Error:", error);
             const frontendUrl = getFrontendUrl(req);
             res.redirect(`${frontendUrl}/login?error=oauth_failed`);
         }
@@ -103,7 +77,7 @@ router.get("/me", protect, async (req, res) => {
     try {
         // Get full user data including profilePicture
         const user = await User.findById(req.user.id).select(
-            '_id username email role profilePicture completedCampaignsCount completedCampaignDonorsTotal',
+            '_id username name email role profilePicture completedCampaignsCount completedCampaignDonorsTotal',
         );
         res.json({
             success: true,
@@ -150,9 +124,9 @@ transporter.verify((error, success) => {
     }
 });
 
-router.post("/forgot-password", async (req, res) => {
+router.post("/forgot-password", authLimiter, async (req, res) => {
     try {
-        const { email } = req.body;
+        const email = typeof req.body?.email === "string" ? req.body.email.toLowerCase().trim() : "";
         if (!email) {
             return res.status(400).json({ success: false, message: "Email is required" });
         }
@@ -211,21 +185,11 @@ router.post("/forgot-password", async (req, res) => {
         });
 
         logger.info(`Password reset link sent to: ${email}`);
-        
-        // In development, also return the token so it can be used for testing
-        const isDevelopment = process.env.NODE_ENV !== 'production';
-        const response = {
+
+        res.json({
             success: true,
             message: "Reset link sent to your email"
-        };
-        
-        if (isDevelopment) {
-            response.devToken = resetToken;
-            response.devResetUrl = `${frontendUrl}/reset-password/${resetToken}`;
-            logger.info(`[DEV MODE] Reset URL: ${response.devResetUrl}`);
-        }
-        
-        res.json(response);
+        });
     } catch (error) {
         logger.error("Forgot password error - Email sending failed:", {
             message: error.message,
@@ -247,12 +211,12 @@ router.post("/forgot-password", async (req, res) => {
     }
 });
 
-router.post("/reset-password/:token", async (req, res) => {
+router.post("/reset-password/:token", authLimiter, async (req, res) => {
     try {
         const { password } = req.body;
-        
-        if (!password) {
-            return res.status(400).json({ success: false, message: "Password is required" });
+
+        if (typeof password !== "string" || password.length < 6) {
+            return res.status(400).json({ success: false, message: "Password must be at least 6 characters" });
         }
 
         const hashedToken = crypto.createHash("sha256").update(req.params.token).digest("hex");
@@ -271,8 +235,9 @@ router.post("/reset-password/:token", async (req, res) => {
         user.passwordResetExpires = undefined;
         await user.save();
 
-        // Generate new tokens after successful reset
-        const { accessToken, refreshToken } = await generateToken(user, res);
+        // Sign out every other session, then log this browser in with fresh tokens
+        await RefreshToken.deleteMany({ user: user._id });
+        await generateToken(user, res);
 
         logger.info(`Password reset successful for: ${user.email}`);
 
