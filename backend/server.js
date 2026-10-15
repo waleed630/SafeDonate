@@ -43,6 +43,8 @@ if (!process.env.JWT_SECRET) {
 await import("./config/passport.js");
 
 const app = express();
+// Hosts like Render sit behind a proxy; needed for secure cookies and correct client IPs in rate limits
+if (process.env.NODE_ENV === "production") app.set("trust proxy", 1);
 const server = http.createServer(app);
 // ====================== CORS ======================
 const frontendUrl = process.env.FRONTEND_URL;

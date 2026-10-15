@@ -2,7 +2,7 @@
 import logger from "../utils/logger.js";
 import { validateRegistration, validateLogin } from "../utils/validation.js";
 import User from "../models/User.js";
-import generateToken from "../utils/generateToken.js";
+import generateToken, { authCookieOptions } from "../utils/generateToken.js";
 import RefreshToken from "../models/RefreshToken.js";
 
 // 🟢 User Registration
@@ -208,8 +208,9 @@ const logoutUser = async (req, res) => {
             await RefreshToken.deleteOne({ token: refreshToken });
         }
 
-        res.clearCookie("accessToken");
-        res.clearCookie("refreshToken");
+        // Must use the same options the cookies were set with, or the browser keeps them
+        res.clearCookie("accessToken", authCookieOptions());
+        res.clearCookie("refreshToken", authCookieOptions());
 
         res.json({ success: true, message: "Logged out successfully" });
     } catch (e) {
