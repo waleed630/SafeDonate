@@ -11,7 +11,7 @@ import RefreshToken from "../models/RefreshToken.js";
 import crypto from "crypto";
 import generateToken from "../utils/generateToken.js";   // ← Updated import path
 import { getFrontendUrl } from "../utils/getFrontendUrl.js";
-import nodemailer from "nodemailer";
+import { sendMail, isEmailConfigured } from "../utils/mailer.js";
 import logger from "../utils/logger.js";
 import { authLimiter, loginLimiter } from "../middleware/rateLimiter.js";
 import { isDemoModeEnabled } from "../middleware/demo.js";
@@ -141,33 +141,6 @@ router.get("/admin", protect, restrictTo("admin"), (req, res) => {
 });
 
 // ====================== PASSWORD RESET ======================
-// Email transporter
-const emailUser = process.env.EMAIL_USER;
-const emailPass = process.env.EMAIL_PASS;
-
-// Validate email credentials
-if (!emailUser || !emailPass) {
-    logger.warn("⚠️ Email credentials not configured. Password reset emails will not be sent.");
-    logger.warn("   Please set EMAIL_USER and EMAIL_PASS in your .env file");
-}
-
-const transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: {
-        user: emailUser,
-        pass: emailPass,
-    },
-});
-
-// Verify transporter connection
-transporter.verify((error, success) => {
-    if (error) {
-        logger.error("❌ Email transporter error:", error.message);
-    } else if (success) {
-        logger.info("✅ Email transporter ready");
-    }
-});
-
 router.post("/forgot-password", authLimiter, async (req, res) => {
     try {
         const email = typeof req.body?.email === "string" ? req.body.email.toLowerCase().trim() : "";
@@ -176,7 +149,7 @@ router.post("/forgot-password", authLimiter, async (req, res) => {
         }
 
         // Check if email credentials are configured
-        if (!emailUser || !emailPass) {
+        if (!isEmailConfigured()) {
             logger.error("Email credentials not configured");
             return res.status(500).json({
                 success: false,
@@ -200,8 +173,7 @@ router.post("/forgot-password", authLimiter, async (req, res) => {
         const frontendUrl = getFrontendUrl(req);
         const resetURL = `${frontendUrl}/reset-password/${resetToken}`;
 
-        await transporter.sendMail({
-            from: `"SafeDonate" <${process.env.EMAIL_USER}>`,
+        await sendMail({
             to: email,
             subject: "Reset Your Password - SafeDonate",
             html: `

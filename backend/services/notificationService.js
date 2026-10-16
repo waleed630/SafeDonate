@@ -1,28 +1,15 @@
 // services/notificationService.js
-import nodemailer from 'nodemailer';
 import Notification from '../models/Notification.js';
 import logger from '../utils/logger.js';
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-});
+import { sendMail } from '../utils/mailer.js';
 
 // Send Email Notification
 export const sendEmailNotification = async (email, subject, html) => {
   try {
-    await transporter.sendMail({
-      from: `"SafeDonate" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject,
-      html,
-    });
+    await sendMail({ to: email, subject, html });
     logger.info(`Email sent to ${email}`);
   } catch (err) {
-    logger.error('Email failed:', err);
+    logger.error(`Email failed: ${err.message}`);
   }
 };
 
