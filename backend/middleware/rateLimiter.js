@@ -1,9 +1,19 @@
 // middleware/rateLimiter.js
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+
+// Browser traffic reaches us through Vercel's /api rewrite and then Render's proxy, so
+// req.ip can be a proxy address shared by every visitor. Vercel overwrites
+// X-Forwarded-For with the real client IP as its first entry, so key on that.
+const clientKey = (req) => {
+    const forwarded = req.headers["x-forwarded-for"];
+    const first = typeof forwarded === "string" ? forwarded.split(",")[0].trim() : "";
+    return ipKeyGenerator(first || req.ip);
+};
 
 const createLimiter = (options) => rateLimit({
     windowMs: options.windowMs,
     max: options.max,
+    keyGenerator: clientKey,
     message: {
         success: false,
         message: "Too many requests from this IP, please try again later."
