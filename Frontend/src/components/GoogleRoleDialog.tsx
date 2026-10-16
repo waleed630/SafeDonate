@@ -16,12 +16,12 @@ const ROLE_OPTIONS: { role: GoogleRole; label: string; icon: string; hint: strin
   { role: 'fundraiser', label: 'Fundraiser', icon: 'fa-hand-holding-heart', hint: 'Start campaigns' },
 ];
 
-/** Shown under the Google button so people pick a role before using it. */
-export function GoogleRoleHint() {
+/** Shown next to the Google button so people pick a role before using it. */
+export function GoogleRoleHint({ pickerPosition = 'below', className = '-mt-1' }: { pickerPosition?: 'above' | 'below'; className?: string }) {
   return (
-    <p className="text-xs text-slate-500 flex items-center gap-1.5 -mt-1">
+    <p className={`text-xs text-slate-500 flex items-center gap-1.5 ${className}`}>
       <i className="fa-solid fa-circle-info text-emerald-600" />
-      New here? Select your role below before continuing with Google.
+      New here? Select your role {pickerPosition} before continuing with Google.
     </p>
   );
 }

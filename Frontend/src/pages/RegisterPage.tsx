@@ -13,7 +13,7 @@ import {
   AlertDialogAction,
 } from '../components/ui/AlertDialog';
 import { useToast } from '../hooks/use-toast';
-import { GoogleRoleDialog } from '../components/GoogleRoleDialog';
+import { GoogleRoleDialog, GoogleRoleHint } from '../components/GoogleRoleDialog';
 
 export function RegisterPage() {
   const [role, setRole] = useState<'donor' | 'fundraiser'>('donor');
@@ -273,6 +273,7 @@ export function RegisterPage() {
               </div>
 
               {/* Social Signup */}
+              <GoogleRoleHint pickerPosition="above" className="mb-3" />
               <div className="grid grid-cols-2 gap-4 mb-8">
                 <button
                   type="button"
