@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
-import { BACKEND_ORIGIN } from '../api/axios';
+import api, { BACKEND_ORIGIN } from '../api/axios';
 
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || BACKEND_ORIGIN;
 
@@ -19,6 +19,15 @@ export function useSocket() {
         reconnectionDelay: 1000,
         // The server identifies the user from the HttpOnly session cookie
         withCredentials: true,
+        // When the API sits behind a same-origin proxy the cookie isn't sent to the
+        // socket server, so also hand it a short-lived token on every (re)connect
+        auth: (cb) => {
+          if (!user?.id) return cb({});
+          api
+            .get('/auth/socket-token')
+            .then((res) => cb({ token: res.data?.token }))
+            .catch(() => cb({}));
+        },
       });
 
       s.on('connect', () => {

@@ -9,6 +9,7 @@ import passport from "passport";
 import User from "../models/User.js";
 import RefreshToken from "../models/RefreshToken.js";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import generateToken from "../utils/generateToken.js";   // ← Updated import path
 import { getFrontendUrl } from "../utils/getFrontendUrl.js";
 import { sendMail, isEmailConfigured } from "../utils/mailer.js";
@@ -117,6 +118,14 @@ router.get(
 );
 
 // ====================== PROTECTED ROUTES ======================
+// In production the SPA reaches the API through a same-origin proxy, so the auth
+// cookie never reaches the socket server directly. The socket client fetches this
+// short-lived token on every (re)connect and sends it in the handshake instead.
+router.get("/socket-token", protect, (req, res) => {
+    const token = jwt.sign({ id: req.user.id, userId: req.user.id }, process.env.JWT_SECRET, { expiresIn: "2m" });
+    res.json({ success: true, token });
+});
+
 router.get("/me", protect, async (req, res) => {
     try {
         // Get full user data including profilePicture
