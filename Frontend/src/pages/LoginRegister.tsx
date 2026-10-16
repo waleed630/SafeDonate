@@ -24,7 +24,10 @@ type AuthTab = 'login' | 'register';
 type Role = UserRole;
 
 export function LoginRegister() {
-  const [activeTab, setActiveTab] = useState<AuthTab>('login');
+  // `/login?tab=register` (where `/` sends first-time visitors) opens the sign-up tab
+  const [activeTab, setActiveTab] = useState<AuthTab>(() =>
+    new URLSearchParams(window.location.search).get('tab') === 'register' ? 'register' : 'login',
+  );
   const [role, setRole] = useState<Role>('donor');
   const [showPassword, setShowPassword] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);

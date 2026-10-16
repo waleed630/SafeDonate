@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const navItems = [
-  { href: '/', icon: 'fa-house', label: 'Home' },
+  { href: '/home', icon: 'fa-house', label: 'Home' },
   { href: '/campaigns', icon: 'fa-compass', label: 'Discover' },
   { href: '/campaigns/featured', icon: 'fa-star', label: 'Featured' },
   { href: '/donor/dashboard', icon: 'fa-handshake', label: 'Donor Hub' },
@@ -55,7 +55,7 @@ export function DiscoverSidebar({ isOpen = false, onClose }: DiscoverSidebarProp
         } lg:translate-x-0`}
       >
       <div className="p-6 border-b border-emerald-700/50 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3 mb-1" onClick={onClose}>
+        <Link to="/home" className="flex items-center gap-3 mb-1" onClick={onClose}>
           <div className="w-10 h-10 rounded-full border-2 border-emerald-400 flex items-center justify-center bg-emerald-700 shadow-lg shadow-emerald-900/20">
             <svg viewBox="0 0 24 24" className="w-6 h-6 text-emerald-300" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />

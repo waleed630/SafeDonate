@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Outlet, Navigate } from 'react-router-dom';
+import { useAuth } from './contexts/AuthContext';
 import { Layout } from './components/layout/Layout';
 import { DiscoverLayout } from './components/layout/DiscoverLayout';
 import { AuthLayout } from './components/layout/AuthLayout';
@@ -45,13 +46,21 @@ import { ManageContactMessagesPage } from './pages/admin/ManageContactMessagesPa
 import { DonationSuccessPage } from './pages/DonationSuccessPage';
 import { DonationCancelPage } from './pages/DonationCancelPage';
 
+/** First visit lands on sign-up (with the demo buttons); signed-in users go to their dashboard. */
+function RootRedirect() {
+  const { isAuthenticated, user } = useAuth();
+  if (isAuthenticated && user) return <Navigate to={`/${user.role}/dashboard`} replace />;
+  return <Navigate to="/login?tab=register" replace />;
+}
+
 function App() {
   return (
     <>
       <BrowserRouter>
       <Routes>
         <Route path="/" element={<Layout />}>
-          <Route index element={<LandingPage />} />
+          <Route index element={<RootRedirect />} />
+          <Route path="home" element={<LandingPage />} />
           <Route path="about" element={<AboutPage />} />
           <Route path="privacy" element={<PrivacyPolicyPage />} />
           <Route path="terms" element={<TermsOfServicePage />} />

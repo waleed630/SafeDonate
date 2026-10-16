@@ -14,7 +14,7 @@ export function LegalDocumentLayout({ title, lastUpdated, toc, children }: Legal
   return (
     <div className="py-8 sm:py-12 lg:py-14 px-4 sm:px-6 md:px-8 max-w-6xl mx-auto">
       <p className="text-sm text-slate-500 mb-2">
-        <Link to="/" className="text-emerald-600 hover:text-emerald-700">
+        <Link to="/home" className="text-emerald-600 hover:text-emerald-700">
           Home
         </Link>
       </p>

@@ -18,7 +18,7 @@ export function MobileHeader({ onMenuClick, title, showLogo = true }: MobileHead
         <i className="fa-solid fa-bars text-xl" />
       </button>
       {showLogo && (
-        <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+        <Link to="/home" className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
           <span className="font-bold text-slate-800 text-lg">SafeDonate</span>
         </Link>
       )}

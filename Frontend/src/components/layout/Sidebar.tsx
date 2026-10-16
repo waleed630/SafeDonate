@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
 const navItems = [
-  { href: '/', icon: 'fa-home', label: 'Home' },
+  { href: '/home', icon: 'fa-home', label: 'Home' },
   { href: '/campaigns', icon: 'fa-magnifying-glass', label: 'Discover' },
   { href: '/campaigns/featured', icon: 'fa-heart', label: 'Featured' },
   { href: '/donor/dashboard', icon: 'fa-chart-line', label: 'Donor Hub' },
@@ -55,7 +55,7 @@ export function Sidebar({ isOpen = false, onClose }: SidebarProps) {
         } lg:translate-x-0`}
       >
       <div className="p-6 border-b border-emerald-700 flex items-center justify-between">
-        <Link to="/" className="flex items-center gap-3" onClick={onClose}>
+        <Link to="/home" className="flex items-center gap-3" onClick={onClose}>
           <svg className="w-8 h-8" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="16" cy="16" r="14" stroke="currentColor" strokeWidth="2" />
             <path d="M16 8v8m-4-4h8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
