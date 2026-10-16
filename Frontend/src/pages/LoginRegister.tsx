@@ -11,8 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/Dialog';
 import type { UserRole } from '../types';
-import { API_BASE_URL } from '../api/axios';
 import { DemoAccess } from '../components/DemoAccess';
+import { GoogleRoleDialog, GoogleRoleHint } from '../components/GoogleRoleDialog';
 
 const dashboardFor = (role: string) => {
   if (role === 'admin') return '/admin/dashboard';
@@ -30,6 +30,7 @@ export function LoginRegister() {
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [welcomeUser, setWelcomeUser] = useState('');
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
+  const [showGoogleRoleDialog, setShowGoogleRoleDialog] = useState(false);
   const { login, register, loadCurrentUser } = useAuth() as any;
   const navigate = useNavigate();
   const location = useLocation();
@@ -72,10 +73,8 @@ export function LoginRegister() {
       });
   }, [navigate, loadCurrentUser, toast]);
 
-  const handleGoogleLogin = () => {
-    // Redirect to backend Google OAuth endpoint with selected role
-    window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
-  };
+  // Confirm the role first; the dialog redirects to Google
+  const handleGoogleLogin = () => setShowGoogleRoleDialog(true);
 
   return (
     <div className="flex-1 flex overflow-hidden">
@@ -236,6 +235,7 @@ export function LoginRegister() {
                     <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800">Apple</span>
                   </button>
                 </div>
+                <GoogleRoleHint />
 
                 <div className="relative flex items-center py-2">
                   <div className="flex-grow border-t border-slate-200" />
@@ -370,6 +370,7 @@ export function LoginRegister() {
                     <span className="text-sm font-medium text-slate-600 group-hover:text-slate-800">Continue with Apple</span>
                   </button>
                 </div>
+                <GoogleRoleHint />
 
                 <div className="relative flex items-center py-2">
                   <div className="flex-grow border-t border-slate-200" />
@@ -583,6 +584,13 @@ export function LoginRegister() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <GoogleRoleDialog
+        open={showGoogleRoleDialog}
+        onOpenChange={setShowGoogleRoleDialog}
+        selectedRole={role}
+        onRoleChange={setRole}
+      />
 
       {/* Forgot Password Modal */}
       <ForgotPasswordModal

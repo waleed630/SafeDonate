@@ -13,14 +13,14 @@ import {
   AlertDialogAction,
 } from '../components/ui/AlertDialog';
 import { useToast } from '../hooks/use-toast';
-
-import { API_BASE_URL } from '../api/axios';
+import { GoogleRoleDialog } from '../components/GoogleRoleDialog';
 
 export function RegisterPage() {
   const [role, setRole] = useState<'donor' | 'fundraiser'>('donor');
   const [showPassword, setShowPassword] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showGoogleRoleDialog, setShowGoogleRoleDialog] = useState(false);
   const [errorDialog, setErrorDialog] = useState<{ open: boolean; title: string; message: string }>({ open: false, title: '', message: '' });
 
   const { register } = useAuth() as any;
@@ -39,10 +39,8 @@ export function RegisterPage() {
     }
   }, []);
 
-  const handleGoogleSignup = () => {
-    // Redirect to backend Google OAuth endpoint with selected role
-    window.location.href = `${API_BASE_URL}/auth/google?role=${role}`;
-  };
+  // Confirm the role first; the dialog redirects to Google
+  const handleGoogleSignup = () => setShowGoogleRoleDialog(true);
 
   const handleRegister = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -150,6 +148,13 @@ export function RegisterPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <GoogleRoleDialog
+        open={showGoogleRoleDialog}
+        onOpenChange={setShowGoogleRoleDialog}
+        selectedRole={role}
+        onRoleChange={setRole}
+      />
 
       <div className="ml-0 lg:ml-72 min-h-screen flex flex-col overflow-hidden bg-white">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
